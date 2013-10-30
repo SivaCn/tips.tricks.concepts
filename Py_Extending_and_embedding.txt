@@ -1,0 +1,578 @@
+4. Extending and embedding Python
+
+4.1 Introduction and concepts
+
+Extending vs. embedding -- They are different but related:
+
+Extending Python means to implement an extension module or an extension type.
+An extension module creates a new Python module which is implemented in C/C++.
+From Python code, an extension module appears to be just like a module
+implemented in Python code. An extension type creates a new Python (built-in)
+type which is implemented in C/C++. From Python code, an extension type appears
+to be just like a built-in type.  Embedding Python, by contrast, is to put the
+Python interpreter within an application (i.e. link it in) so that the
+application can run Python scripts. The scripts can be executed or triggered in
+a variety of ways, e.g. they can be bound to keys on the keyboard or to menu
+items, they can be triggered by external events, etc. Usually, in order to make
+the embedded Python interpreter useful, Python is also extended with functions
+from the embedding application, so that the scripts can call functions that are
+implemented by the embedding C/C++ application.  Documentation -- The two
+important sources for information about extending and embedding are the
+following:
+
+Extending and Embedding the Python Interpreter
+Python/C API Reference Manual
+Types of extensions:
+
+Extension modules -- From the Python side, it appears to be a Python module.
+Usually it exports functions.  Extension types -- Used to implement a new
+Python data type.  Extension classes -- From the Python side, it appears to be
+a class.  Tools -- There are several tools that support the development of
+Python extensions:
+
+SWIG -- Learn about SWIG at: http://www.swig.org.
+Pyrex -- Learn about Pyrex at: http://www.cosc.canterbury.ac.nz/~greg/python/Pyrex/.
+
+4.2 Extension modules
+
+Writing an extension module by hand -- What to do:
+
+Create the "init" function -- The name of this function must be "init" followed by the name of the module. Every extension module must have such a function.
+Create the function table -- This table maps function names (referenced from Python code) to function pointers (implemented in C/C++).
+Implement each wrapper function.
+Implementing a wrapper function -- What to do:
+
+Capture the arguments with PyArg_ParseTuple. The format string specifies how arguments are to be converted and captured. See 1.7 Extracting Parameters in Extension Functions. Here are some of the most commonly used types:
+Use "i", "s", "f", etc to convert and capture simple types such as integers, strings, floats, etc.
+Use "O" to get a pointer to Python "complex" types such as lists, tuples, dictionaries, etc.
+Use items in parentheses to capture and unpack sequences (e.g. lists and tuples) of fixed length. Example:
+
+if (!PyArg_ParseTuple(args, "(ii)(ii)", &x, &y, &width, &height))
+{
+    return NULL;
+} /* if */
+A sample call might be:
+
+lowerLeft = (x1, y1)
+extent = (width1, height1)
+scan(lowerLeft, extent)
+
+Use ":aName" (colon) at the end of the format string to provide a function name
+for error messages. Example:
+
+if (!PyArg_ParseTuple(args, "O:setContentHandler", &pythonInstance))
+{
+    return NULL;
+} /* if */
+
+Use ";an error message" (semicolon) at the end of the format string to provide
+a string that replaces the default error message.  Docs are available at:
+http://www.python.org/doc/current/ext/parseTuple.html.  Write the logic.
+Handle errors and exceptions -- You will need to understand how to (1)
+clearing errors and exceptions and (2) Raise errors (exceptions).  Many
+functions in the Python C API raise exceptions. You will need to check for
+and clear these exceptions. Here is an example:
+
+char * message;
+int messageNo;
+
+message = NULL;
+messageNo = -1;
+/* Is the argument a string?
+*/
+if (! PyArg_ParseTuple(args, "s", &message))
+{
+    /* It's not a string.  Clear the error.
+    *  Then try to get a message number (an integer).
+    */
+    PyErr_Clear();
+    if (! PyArg_ParseTuple(args, "i", &messageNo))
+    {
+        o
+        o
+        o
+
+You can also raise exceptions in your C code that can be caught (in a
+"try:except:" block) back in the calling Python code. Here is an example:
+
+if (n == 0)
+{
+    PyErr_SetString(PyExc_ValueError, "Value must not be zero");
+    return NULL;
+}
+
+See Include/pyerrors.h in the Python source distribution for more
+exception/error types.
+
+And, you can test whether a function in the Python C API that you have called
+has raised an exception. For example:
+
+if (PyErr_Occurred())
+{
+    /* An exception was raised.
+    *  Do something about it.
+    */
+    o
+    o
+    o
+
+For more documentation on errors and exceptions, see:
+http://www.python.org/doc/current/api/exceptionHandling.html.
+
+Create and return a value: For each built-in Python type there is a set of API
+    functions to create and manipulate it. See the "Python/C API Reference
+    Manual" for a description of these functions. For example, see:
+
+http://www.python.org/doc/current/api/intObjects.html
+http://www.python.org/doc/current/api/stringObjects.html
+http://www.python.org/doc/current/api/tupleObjects.html
+http://www.python.org/doc/current/api/listObjects.html
+http://www.python.org/doc/current/api/dictObjects.html
+
+Etc.
+
+The reference count -- You will need to follow Python's rules for reference
+    counting that Python uses to garbage collect objects. You can learn about
+    these rules at http://www.python.org/doc/current/ext/refcounts.html. You
+    will not want Python to garbage collect objects that you create too early
+    or too late. With respect to Python objects created with the above
+    functions, these new objects are owned and may be passed back to Python
+    code. However, there are situations where your C/C++ code will not
+    automatically own a reference, for example when you extract an object from
+    a container (a list, tuple, dictionary, etc). In these cases you should
+    increment the reference count with Py_INCREF.
+
+4.3 SWIG
+
+Note: Our discussion and examples are for SWIG version 1.3
+
+SWIG will often enable you to generate wrappers for functions in an existing C
+    function library. SWIG does not understand everything in C header files.
+    But it does a fairly impressive job. You should try it first before
+    resorting to the hard work of writing wrappers by hand.
+
+More information on SWIG is at http://www.swig.org.
+
+Here are some steps that you can follow:
+
+Create an interface file -- Even when you are wrapping functions defined in an
+    existing header file, creating an interface file is a good idea. Include
+    your existing header file into it, then add whatever else you need. Here is
+    an extremely simple example of a SWIG interface file:
+
+%module MyLibrary
+
+%{
+#include "MyLibrary.h"
+%}
+
+%include "MyLibrary.h"
+
+Comments:
+
+The "%{" and "%}" brackets are directives to SWIG. They say: "Add the code
+between these brackets to the generated wrapper file without processing it.
+The "%include" statement says: "Copy the file into the interface file here. In
+effect, you are asking SWIG to generate wrappers for all the functions in this
+header file. If you want wrappers for only some of the functions in a header
+file, then copy or reproduce function declarations for the desired functions
+here. An example:
+
+%module MyLibrary
+
+%{
+#include "MyLibrary.h"
+%}
+
+int calcArea(int width, int height);
+int calcVolume(int radius);
+
+This example will generate wrappers for only two functions.
+
+You can find more information about the directives that are used in SWIG
+interface files in the SWIG User Manual, in particular at:
+
+http://www.swig.org/Doc1.3/Preprocessor.html
+http://www.swig.org/Doc1.3/Python.html
+Generate the wrappers:
+swig -python MyLibrary.i
+Compile and link the library. On Linux, you can use something like the following:
+gcc -c MyLibrary.c
+gcc -c -I/usr/local/include/python2.3 MyLibrary_wrap.c
+gcc -shared MyLibrary.o MyLibrary_wrap.o -o _MyLibrary.so
+
+Note that we produce a shared library whose name is the module name prefixed
+with an underscore. SWIG also generates a .py file, without the leading
+underscore, which we will import from our Python code and which, in turn,
+imports the shared library.
+
+Use the extension module in your python code:
+
+Python 2.3b1 (#1, Apr 25 2003, 20:36:09)
+[GCC 2.95.4 20011002 (Debian prerelease)] on linux2
+Type "help", "copyright", "credits" or "license" for more information.
+>>> import MyLibrary
+>>> MyLibrary.calcArea(4.0, 5.0)
+20.0
+
+Here is a makefile that will execute swig to generate wrappers, then compile
+              and link the extension.
+
+CFLAGS = -I/usr/local/include/python2.3
+
+all: _MyLibrary.so
+
+_MyLibrary.so: MyLibrary.o MyLibrary_wrap.o
+	gcc -shared MyLibrary.o MyLibrary_wrap.o -o _MyLibrary.so
+
+MyLibrary.o: MyLibrary.c
+	gcc -c MyLibrary.c -o MyLibrary.o
+
+MyLibrary_wrap.o: MyLibrary_wrap.c
+	gcc -c ${CFLAGS} MyLibrary_wrap.c -o MyLibrary_wrap.o
+
+MyLibrary_wrap.c: MyLibrary.i
+	swig -python MyLibrary.i
+
+clean:
+	rm -f MyLibrary.py MyLibrary.o MyLibrary_wrap.c \
+		MyLibrary_wrap.o _MyLibrary.so
+
+Download as text (original file name: Examples/MyLibrary_makefile).
+Here is an example of running this makefile:
+
+$ make -f MyLibrary_makefile clean
+rm -f MyLibrary.py MyLibrary.o MyLibrary_wrap.c \
+        MyLibrary_wrap.o _MyLibrary.so
+$ make -f MyLibrary_makefile
+gcc -c MyLibrary.c -o MyLibrary.o
+swig -python MyLibrary.i
+gcc -c -I/usr/local/include/python2.3 MyLibrary_wrap.c -o MyLibrary_wrap.o
+gcc -shared MyLibrary.o MyLibrary_wrap.o -o _MyLibrary.so
+And, here are C source files that can be used in our example:
+
+/* MyLibrary.h
+*/
+
+float calcArea(float width, float height);
+float calcVolume(float radius);
+
+int getVersion();
+
+int getMode();
+Download as text (original file name: Examples/MyLibrary.h).
+/* MyLibrary.c
+*/
+
+float calcArea(float width, float height)
+{
+   return (width * height);
+}
+
+float calcVolume(float radius)
+{
+   return (3.14 * radius * radius);
+}
+
+int getVersion()
+{
+	return 123;
+}
+
+int getMode()
+{
+	return 1;
+}
+
+4.4 Pyrex
+
+Pyrex is a useful tool for writing Python extensions. Because the Pyrex
+language is similar to Python, writing extensions in Pyrex is easier than doing
+so in C.
+
+More information on Pyrex is at
+http://www.cosc.canterbury.ac.nz/~greg/python/Pyrex/.
+
+Here is a simple function definition in Pyrex.
+
+# python_201_pyrex_string.pyx
+
+import string
+
+def formatString(object s1, object s2):
+    s1 = string.strip(s1)
+    s2 = string.strip(s2)
+    s3 = '<<%s||%s>>' % (s1, s2)
+    s4 = s3 * 4
+    return s4
+
+And, here is a make file:
+
+CFLAGS = -DNDEBUG -O3 -Wall -Wstrict-prototypes -fPIC \
+	-I/usr/local/include/python2.3
+
+all: python_201_pyrex_string.so
+
+python_201_pyrex_string.so: python_201_pyrex_string.o
+	gcc -shared python_201_pyrex_string.o -o python_201_pyrex_string.so
+
+python_201_pyrex_string.o: python_201_pyrex_string.c
+	gcc -c ${CFLAGS} python_201_pyrex_string.c -o python_201_pyrex_string.o
+
+python_201_pyrex_string.c: python_201_pyrex_string.pyx
+	pyrexc python_201_pyrex_string.pyx
+
+clean:
+	rm -f python_201_pyrex_string.so python_201_pyrex_string.o \
+		python_201_pyrex_string.c
+
+Here is another example. In this one, one function in the .pyx file calls
+another. Here is the implementation file:
+
+# python_201_pyrex_primes.pyx
+
+def showPrimes(int kmax):
+    plist = primes(kmax)
+    for p in plist:
+        print 'prime: %d' % p
+
+cdef primes(int kmax):
+    cdef int n, k, i
+    cdef int p[1000]
+    result = []
+    if kmax > 1000:
+        kmax = 1000
+    k = 0
+    n = 2
+    while k < kmax:
+        i = 0
+        while i < k and n % p[i] <> 0:
+            i = i + 1
+        if i == k:
+           p[k] = n
+           k = k + 1
+           result.append(n)
+        n = n + 1
+    return result
+
+And, here is a make file:
+
+#CFLAGS = -DNDEBUG -g -O3 -Wall -Wstrict-prototypes -fPIC \
+#	-I/usr/local/include/python2.3
+CFLAGS = -DNDEBUG -I/usr/local/include/python2.3
+
+all: python_201_pyrex_primes.so
+
+python_201_pyrex_primes.so: python_201_pyrex_primes.o
+	gcc -shared python_201_pyrex_primes.o -o python_201_pyrex_primes.so
+
+python_201_pyrex_primes.o: python_201_pyrex_primes.c
+	gcc -c ${CFLAGS} python_201_pyrex_primes.c -o python_201_pyrex_primes.o
+
+python_201_pyrex_primes.c: python_201_pyrex_primes.pyx
+	pyrexc python_201_pyrex_primes.pyx
+
+clean:
+	rm -f python_201_pyrex_primes.so python_201_pyrex_primes.o \
+		python_201_pyrex_primes.c
+
+Here is the output from running the makefile:
+
+$ make -f python_201_pyrex_makeprimes clean
+rm -f python_201_pyrex_primes.so python_201_pyrex_primes.o \
+        python_201_pyrex_primes.c
+$ make -f python_201_pyrex_makeprimes
+pyrexc python_201_pyrex_primes.pyx
+
+gcc -c -DNDEBUG -I/usr/local/include/python2.3  python_201_pyrex_primes.c -o
+    python_201_pyrex_primes.o
+
+gcc -shared python_201_pyrex_primes.o -o python_201_pyrex_primes.so
+Here is an interactive example of its use:
+
+$ python
+Python 2.3b1 (#1, Apr 25 2003, 20:36:09)
+[GCC 2.95.4 20011002 (Debian prerelease)] on linux2
+Type "help", "copyright", "credits" or "license" for more information.
+>>> import python_201_pyrex_primes
+>>> dir(python_201_pyrex_primes)
+['__builtins__', '__doc__', '__file__', '__name__', 'showPrimes']
+>>> python_201_pyrex_primes.showPrimes(5)
+prime: 2
+prime: 3
+prime: 5
+prime: 7
+prime: 11
+
+This next example shows how to use Pyrex to implement a new extension type,
+that is a new Python built-in type. Notice that the class is
+declared with the cdef keyword, which tells Pyrex to generate the
+C implementation of a type instead of a class.
+
+Here is the implementation file:
+
+# python_201_pyrex_clsprimes.pyx
+
+"""An implementation of primes handling class
+for a demonstration of Pyrex.
+"""
+
+cdef class Primes:
+    """A class containing functions for
+    handling primes.
+    """
+
+    def showPrimes(self, int kmax):
+        """Show a range of primes.
+        Use the method primes() to generate the primes.
+        """
+        plist = self.primes(kmax)
+        for p in plist:
+            print 'prime: %d' % p
+
+    def primes(self, int kmax):
+        """Generate the primes in the range 0 - kmax.
+        """
+        cdef int n, k, i
+        cdef int p[1000]
+        result = []
+        if kmax > 1000:
+            kmax = 1000
+        k = 0
+        n = 2
+        while k < kmax:
+            i = 0
+            while i < k and n % p[i] <> 0:
+                i = i + 1
+            if i == k:
+               p[k] = n
+               k = k + 1
+               result.append(n)
+            n = n + 1
+        return result
+
+And, here is a make file:
+
+CFLAGS = -DNDEBUG -I/usr/local/include/python2.3
+
+all: python_201_pyrex_clsprimes.so
+
+python_201_pyrex_clsprimes.so: python_201_pyrex_clsprimes.o
+	gcc -shared python_201_pyrex_clsprimes.o -o python_201_pyrex_clsprimes.so
+
+python_201_pyrex_clsprimes.o: python_201_pyrex_clsprimes.c
+	gcc -c ${CFLAGS} python_201_pyrex_clsprimes.c -o python_201_pyrex_clsprimes.o
+
+python_201_pyrex_clsprimes.c: python_201_pyrex_clsprimes.pyx
+	pyrexc python_201_pyrex_clsprimes.pyx
+
+clean:
+	rm -f python_201_pyrex_clsprimes.so python_201_pyrex_clsprimes.o \
+		python_201_pyrex_clsprimes.c
+
+Here is output from running the makefile:
+
+$ make -f python_201_pyrex_makeclsprimes clean
+rm -f python_201_pyrex_clsprimes.so python_201_pyrex_clsprimes.o \
+        python_201_pyrex_clsprimes.c
+$ make -f python_201_pyrex_makeclsprimes
+pyrexc python_201_pyrex_clsprimes.pyx
+
+gcc -c -DNDEBUG -I/usr/local/include/python2.3  python_201_pyrex_clsprimes.c -o
+    python_201_pyrex_clsprimes.o
+
+gcc -shared python_201_pyrex_clsprimes.o -o python_201_pyrex_clsprimes.so
+
+And here is an interactive example of its use:
+
+$ python
+Python 2.3b1 (#1, Apr 25 2003, 20:36:09)
+[GCC 2.95.4 20011002 (Debian prerelease)] on linux2
+Type "help", "copyright", "credits" or "license" for more information.
+>>> import python_201_pyrex_clsprimes
+>>> dir(python_201_pyrex_clsprimes)
+['Primes', '__builtins__', '__doc__', '__file__', '__name__']
+>>> primes = python_201_pyrex_clsprimes.Primes()
+>>> dir(primes)
+['__class__', '__delattr__', '__doc__', '__getattribute__', '__hash__',
+'__init__', '__new__', '__reduce__', '__reduce_ex__', '__repr__',
+'__setattr__', '__str__', 'primes', 'showPrimes']
+>>> primes.showPrimes(4)
+prime: 2
+prime: 3
+prime: 5
+prime: 7
+
+Documentation -- Also notice that Pyrex preserves the documentation for the
+module, the class, and the methods in the class. You can show
+this documentation with pydoc, as follows:
+
+$ pydoc python_201_pyrex_clsprimes
+Or, in Python interactive mode, use:
+
+$ python
+Python 2.3b1 (#1, Apr 25 2003, 20:36:09)
+[GCC 2.95.4 20011002 (Debian prerelease)] on linux2
+Type "help", "copyright", "credits" or "license" for more information.
+>>> import python_201_pyrex_clsprimes
+>>> help(python_201_pyrex_clsprimes)
+
+4.5 SWIG vs. Pyrex
+
+Choose SWIG when:
+
+You already have an existing C or C++ implementation of the code you want to
+call from Python. In this case you want SWIG to generate the
+wrappers.  You want to write the implementation in C or C++ by
+hand. Perhaps, because you think you can do so quickly, for
+example, or because you believe that you can make it highly
+optimized. Then, you want to be able to generate the Python
+(extension) wrappers for it quickly.  Choose Pyrex when:
+
+You do not have a C/C++ implementation and you want an easier way to write that
+C implementation. Writing Pyrex code, which is a lot like Python,
+is easier than writing C or C++ code by hand).  You start to
+write the implementation in C, then find that it requires lots of
+calls to the Python C API, and you want to avoid having to learn
+how to do that.
+
+4.6 Extension types
+
+The goal -- A new built-in data type for Python.
+
+Existing examples -- Objects/listobject.c, Objects/stringobject.c,
+Objects/dictobject.c, etc in the Python source code distribution.
+
+In older versions of the Python source code distribution, a template for the C
+code was provided in Objects/xxobject.c. Objects/xxobject.c is no longer
+included in the Python source code distribution. However:
+
+The discussion and examples for creating extension types have been expanded.
+See: Extending and Embedding the Python Interpreter, 2. Defining New Types.  In
+the Tools/framer directory of the Python source code distribution there is an
+application that will generate a skeleton for an extension type from a
+specification object written in Python. Run Tools/framer/example.py to see it
+in action.  And, you can use Pyrex to generate a new built-in type. To do so,
+implement a Python/Pyrex class and declare the class with the Pyrex keyword
+cdef. In fact, you may want to use Pyrex to generate a minimal extension type,
+and then edit that generated code to insert and add functionality by hand. See
+the Pyrex section for an example.
+
+Pyrex also goes some way toward giving you access to (existing) C structs and
+functions from Python.
+
+4.7 Extension classes
+
+Extension classes the easy way -- SWIG shadow classes.
+
+Start with an implementation of a C++ class and its header file.
+
+Use the following SWIG flags:
+
+swig -c++ -python mymodule.i More information is available with the SWIG
+documentation at: http://www.swig.org/Doc1.3/Python.html.
+
+Extension classes the Pyrex way -- An alternatie is to use Pyrex to compile a
+class definition that does not have the cdef keyword. Using cdef on the class
+tells Pyrex to generate an extension type instead of a class. You will have to
+determine whether you want an extension class or an extension type.
