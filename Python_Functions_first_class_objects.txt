@@ -1,0 +1,134 @@
+In short, it means there are no restrictions on the object's use. It's the same
+as any other object.
+
+A first class object is an entity that can be dynamically created, destroyed,
+passed to a function, returned as a value, and have all the rights as other
+variables in the programming language have.
+
+Depending on the language, this can imply:
+
+being expressible as an anonymous literal value being storable in variables
+being storable in data structures having an intrinsic identity (independent of
+                                                                any given name)
+being comparable for equality with other entities being passable as a parameter
+to a procedure/function being returnable as the result of a procedure/function
+being constructible at runtime being printable being readable being
+transmissible among distributed processes being storable outside running
+processes Source.
+
+In C++ functions themselves are not first class objects, however:
+
+You can override the '()' operator making it possible to have an object
+function, which is first class.  Function pointers are first class.  boost
+bind, lambda and function do offer first class functions In C++, classes are
+not first class objects but instances of those classes are. I believe in Python
+both the classes and the objects are first class objects.
+
+Here is an example of Javascript first class functions:
+
+// f: function that takes a number and returns a number
+// deltaX: small positive number
+// returns a function that is an approximate derivative of f
+function makeDerivative( f, deltaX )
+{
+    var deriv = function(x)
+    {
+       return ( f(x + deltaX) - f(x) )/ deltaX;
+    }
+    return deriv;
+}
+var cos = makeDerivative( Math.sin, 0.000001);
+// cos(0)     ~> 1
+// cos(pi/2)  ~> 0
+Source.
+
+Entities that are not first class objects are referred to as second-class
+objects. Functions in C++ are second class because they can't be dynamically
+created.
+
+Regarding the edit:
+
+EDIT. When one says "everything is an object" (like in Python), does he indeed
+mean that "everything is first-class"?
+
+The term object can be used loosely and doesn't imply being first class. And it
+would probably make more sense to call the whole concept 'first class
+entities'. But in Python they do aim to make everything first class. I believe
+the intent of the person who made your statement meant first class.
+
+
+################################################################################
+
+“First class” means you can operate on them in the usual manner. Most of the
+times, this just means you can pass these first-class citizens as arguments to
+functions, or return them from functions.
+
+This is self-evident for objects but not always so evident for functions, or
+even classes:
+
+void f(int n) { return n * 2; }
+
+void g(Action<int> a, int n) { return a(n); }
+
+// Now call g and pass f:
+
+g(f, 10); // = 20
+This is an example in C
+# where functions actually aren't first-class objects.
+The above code therefore uses a small workaround
+(namely a generic delegate called Action<>) to pass a function as an argument.
+Other languages, such as Ruby, allow treating even classes and code blocks as
+normal variables (or in the case of Ruby, constants).
+
+
+################################################################################
+
+
+"When one says "everything is an object" (like in Python), does he indeed mean
+that "everything is first-class"?"
+
+Yes.
+
+Everything in Python is a proper object. Even things that are "primitive types"
+in other languages.
+
+You find that an object like 2 actually has a fairly rich and sophisticated
+interface.
+
+>>> dir(2)
+['__abs__', '__add__', '__and__', '__class__', '__cmp__', '__coerce__',
+ '__delattr__', '__div__', '__divmod__', '__doc__', '__float__',
+ '__floordiv__', '__getattribute__', '__getnewargs__', '__hash__', '__hex__',
+ '__index__', '__init__', '__int__', '__invert__', '__long__', '__lshift__',
+ '__mod__', '__mul__', '__neg__', '__new__', '__nonzero__', '__oct__',
+ '__or__', '__pos__', '__pow__', '__radd__', '__rand__', '__rdiv__',
+ '__rdivmod__', '__reduce__', '__reduce_ex__', '__repr__', '__rfloordiv__',
+ '__rlshift__', '__rmod__', '__rmul__', '__ror__', '__rpow__', '__rrshift__',
+ '__rshift__', '__rsub__', '__rtruediv__', '__rxor__', '__setattr__',
+ '__str__', '__sub__', '__truediv__', '__xor__']
+
+
+Because everything's a first-class object in Python, there are relatively few
+obscure special cases.
+
+In Java, for example, there are primitive types (int, bool, double, char) that
+aren't proper objects. That's why Java has to introduce Integer, Boolean,
+Double and Character as first-class types. This can be hard to teach to
+beginners -- it isn't obvious why both a primitive type and an class have to
+exist side-by-side.
+
+It also means that an object's class is -- itself -- an object. This is
+different from C++, where the classes don't always have a distinct existence at
+run-time.
+
+The type of 2 is the type 'int' object, which has methods, attributes and a
+type.
+
+>>> type(2)
+<type 'int'>
+
+The type of a built-in type like int is the type 'type' object. This has
+methods and attributes, also.
+
+>>> type(type(2))
+<type 'type'>
