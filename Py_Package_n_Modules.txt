@@ -1,0 +1,131 @@
+7. Guidance on Packages and Modules
+
+7.1 Introduction
+
+Python has an excellent range of implementation organization structures. These
+range from statements and control structures (at a low level) through
+functions, methods, and classes (at an intermediate level) and modules and
+packages at an upper level.
+
+This section provides some guidance with the use of packages. In particular:
+
+How to construct and implement them.
+How to use them.
+How to distribute and install them.
+
+
+7.2 Implementing Packages
+
+A Python package is a collection of Python modules in a disk directory.
+
+In order to be able to import individual modules from a directory, the
+directory must contain a file named __init__.py. (Note that requirement does
+                                                  not apply to directories that
+                                                  on listed in PYTHONPATH.) The
+__init__.py serves several purposes:
+
+The presence of the file __init__.py in a directory marks the directory as a
+Python package, which enables importing modules from the directory.  The first
+time an application imports any module from the directory/package, the code in
+the module __init__ is evaluated.  If the package itself is imported (as
+opposed to an individual module within the directory/package),
+then it is the __init__ that is imported (and evaluated).
+
+7.3 Using Packages
+
+One simple way to enable the user to import and use a package is to instruct
+the use to import individual modules from the package.
+
+A second, slightly more advanced way to enable the user to import the package
+is to expose those features of the package in the __init__ module. Suppose that
+module mod1 contains functions fun1a and fun1b and suppose that module mod2
+contains functions fun2a and fun2b. Then file __init__.py might contain the
+following:
+
+from mod1 import fun1a, fun1b
+from mod2 import fun2a, fun2b
+Download as text (original file name: Examples/Testpackages/testpackages/__init__.py).
+Then, if the following is evaluated in the user's code:
+
+import testpackages
+Then testpackages will contain fun1a, fun1b, fun2a, and fun2b.
+
+For example, here is an interactive session that demostrates importing the
+package:
+
+>>> import testpackages
+>>> print dir(testpackages)
+[`__builtins__', `__doc__', `__file__', `__name__', `__path__',
+`fun1a', `fun1b', `fun2a', `fun2b', `mod1', `mod2']
+
+
+7.4 Distributing and Installing Packages
+
+Distutils (Python Distribution Utilities) has special support for distrubuting
+and installing packages.
+
+In this section we'll learn how to use Distutils to package and install a
+distribution that contains a single package with multiple modules.
+
+As our example, imagine that we have a directory containing the following:
+
+Testpackages
+Testpackages/README
+Testpackages/MANIFEST.in
+Testpackages/setup.py
+Testpackages/testpackages/__init__.py
+Testpackages/testpackages/mod1.py
+Testpackages/testpackages/mod2.py
+
+Notice the sub-directory Testpackages/testpackages containing the file
+__init__.py. This is the Python package that we will install.
+
+We'll describe how to configure the above files so that they can be packaged as
+a single distribution file and so that the Python package they contain can be
+installed as a package by Distutils.
+
+The MANIFEST.in file lists the files that we want included in our distribution.
+Here is the contents of our MANIFEST.in file:
+
+include README MANIFEST MANIFEST.in
+include setup.py
+include testpackages/*.py
+
+The setup.py describes to Distutils (1) how to package the distribution file
+and (2) how to install the distribution. Here is the contents of our sample
+setup.py:
+
+#!/usr/bin/env python
+
+from distutils.core import setup                    # [1]
+
+long_description = 'Tests for installing and distributing Python packages'
+
+setup(name = 'testpackages',                        # [2]
+    version = '1.0a',
+    description = 'Tests for Python packages',
+    maintainer = 'Dave Kuhlman',
+    maintainer_email = 'dkuhlman@rexx.com',
+    url = 'http://www.rexx.com/ dkuhlman',
+    long_description = long_description,
+    packages = ['testpackages']                     # [3]
+    )
+
+Explanation:
+
+We import the necessary component from Distutils.  We describe the package and
+its developer/maintainer.  We specify the directory that is to be installed as
+a package. When the user installs our distribution, this directory and all the
+modules in it will be installed as a package.  Now, to create a distribution
+file, we run the following:
+
+python setup.py sdist --formats=gztar
+which will create a file testpackages-1.0a.tar.gz under the directory dist.
+
+Then, the user, who wishes to install this file, can do so by executing the
+following:
+
+tar xvzf testpackages-1.0a.tar.gz
+cd testpackages-1.0a
+python setup.py build
+python setup.py install        # as root
