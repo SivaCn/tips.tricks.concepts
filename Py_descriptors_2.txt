@@ -1,0 +1,200 @@
+What are descriptors?
+
+In a nutshell, a descriptor is a way to customize what happens when you
+reference an attribute on a model. Normally, Python just gets and sets values
+on attributes without any special processing. It’s just basic storage.
+Sometimes, however, you might want to do more. You might need to validate the
+value that’s being assigned to a value. You may want to retrieve a value and
+cache it for later use, so that future references don’t have all the overhead.
+These are all things that would normally need to be done with a method, but if
+you’ve already started with a basic attribute, changing to a method would
+require changing all the code that uses the attribute to use a method call
+instead. This potential change is a primary motivation for typical Java
+programs to always use methods even for basic attribute access. The common
+pattern is to have all attributes private, and provide public access through
+methods, simply to accommodate potential future changes in the internals of
+that attribute access.  Python’s descriptors as an alternative approach.
+Instead of starting with methods all the time, you can start with basic
+attributes and write all the code you want. Then, if you ever need advanced
+processing to occur when you access those attributes, you can just add in a
+descriptor to do the work, without updating all the other code. In my opinion,
+this makes the referring code much cleaner, without having to deal with method
+calls for attributes. But that’s an issue outside the scope of this article.
+But the real detail of a descriptor is that it’s a Python object that’s
+assigned as an attribute of a class. The object is an instance of a class
+that’s defined in a particular way (described briefly below), and the attribute
+it’s assigned to is the one that will have the special processing. So the
+actual extra code will be inside the descriptor’s class, rather than the class
+it will be assigned to. This may seem a little weird, but it also makes some
+sense.  Some examples of descriptors in Django: Model managers ForeignKey
+fields (usage) …others that I’m not thinking of right now (sorry, it’s late!)
+
+Descriptor protocol
+
+A descriptor is implemented as a standard new-style class in Python, and it
+doesn’t need to inherit from anything in particular besides object. The real
+trick to building a descriptor is defining at least one of the following three
+methods. Note that instance below returns to the object where the attribute was
+accessed, and owner is the class where the descriptor was assigned as an
+attribute.  __get__(self, instance, owner) — This will be called when the
+attribute is retrieved (value = obj.attr), and whatever it returns is what will
+be given to the code that requested the attribute’s value.  __set__(self,
+instance, value) —
+This gets called when a value is set to the attribute (obj.attr = 'value'), and
+shouldn’t return anything at all.  __delete__(self, instance) — This is called
+when the attribute is deleted from an object (del obj.attr) Astute readers will
+quickly notice — and perhaps be confused by — the fact that only __get__ can
+receive the owner class, while the rest only receive the instance. Descriptors
+are assigned to a class, not to an instance, and modifying the class would
+actually overwrite or delete the descriptor itself, rather than triggering its
+code. This intentional. Otherwise, once a descriptor is set, it could never be
+removed or modified without modifying source code and restarting the program.
+That’s not preferable, so only the retrieval method has access to the owner
+class. It will always be set to the appropriate class, though instance may be
+None if the attribute was accessed from the class. This is what Django uses to
+throw an error if you try to access a manager from an object instead of a
+class, or a related model (ForeignKey) on a class instead of an object.  More
+than just the protocol Also, since descriptors are standard classes that just
+implement a specific set of methods, they can also contain anything else used
+on standard Python classes. This is especially useful when defining __init__ on
+a descriptor class, so that you can customize descriptors for individual
+attributes. For example, the following descriptor simulates rolling a die:
+
+import random
+
+class Die(object):
+    def __init__(self, sides=6):
+        self.sides = sides
+
+    def __get__(self, instance, owner):
+        return int(random.random() * self.sides) + 1
+
+This will default to a 6-sided die, but the number of sides can be explicitly
+defined on a per-attribute basis. Then, when the attribute is accessed, the
+__get__ method will be called, returning a random number based on the number of
+sides the die was created with.
+
+Using descriptors
+
+As mentioned above, descriptors are assigned to classes, and the special
+methods are called automatically when the attribute is accessed, and the method
+used depends on what type of access is being performed. The Die example above
+might be used as follows:
+
+class Game(object):
+    d6 = Die()
+    d10 = Die(sides=10)
+    d20 = Die(sides=20)
+
+Then, these special attributes can be accessed either on that class or on any
+instances of it.
+
+>>> Game.d6
+5
+>>> Game.d10
+8
+>>> Game.d20
+19
+>>> Game.d20
+3
+>>> game = Game()
+>>> game.d20
+12
+
+
+Storing data with a descriptor
+
+Yesterday’s example generated a new value each time it was accessed, which is
+really only useful in a few situations. More often, you’ll need to still store
+a value somewhere, and just do something special when its modified or
+retrieved. There are a few ways to approach this, but I’ll just cover one.  The
+simplest way to store a value for a desciptor takes advantage of a subtle
+distinction of how Python accesses values on an instance object. Every Python
+object has a namespace that’s separate from the namespace of its class, so that
+each object can have different values attached to it. Normally, the object’s
+attributes are a direct pass-through to this namespace, but descriptors
+short-circuit that process. Thankfully, Python allows another way to access the
+object’s namespace directly: the __dict__ attribute of the object.  Every
+object has a __dict__ attribute, which is a standard Python dictionary
+containing mappings for the various values attached to it. Even though
+descriptors get in the way of how this is normally accessed, your code can use
+__dict__ to get at it directly, and it’s a great place to store a single value.
+Yesterday, I mentioned that descriptors can be used to cache values to speed up
+subsequent accesses, and this is a good way to go about that.
+
+from myapp.utils import retrieve
+
+class CachedValue(object):
+    def __init__(self, name):
+        self.name = name
+
+    def __get__(self, instance, owner):
+        if self.name not in instance.__dict__:
+            instance.__dict__[self.name] = retrieve()
+        return instance.__dict__[self.name]
+
+Of course, you’ll notice something interesting here. We have to assign the
+value to the dictionary using a name, and the only way we know what name to use
+is to supply it explicitly. For this example, the constructor takes a required
+name argument, which will be used for the dictionary’s key, but Django provides
+a much better way to solve this problem. More on that later.  So far, the
+examples have only involved retrieval. This technique is easily extended to
+allow the value to be modified as well, by adding a __set__ method. The
+following example should look fairly straightforward, now that you know the
+__dict__ technique:
+
+class SimpleDescriptor(object):
+   def __init__(self, name):
+        self.name = name
+
+    def __get__(self, instance, owner):
+        if self.name not in instance.__dict__:
+            raise AttributeError, self.name
+        return instance.__dict__[self.name]
+
+    def __set__(self, instance, value):
+        instance.__dict__[self.name] = value
+
+This also illustrates another interesting point with __get__: if the value
+being retrieved isn’t set, the expected behavior is to raise an AttributeError.
+That’s what Python does internally, and that’s what most code will be expecting
+when this occurs.
+
+Subclassing Field
+
+One of the most important uses for descriptors in Django is when creating new
+Field types for use with models. There’s a lot that can be done when creating
+new field types, but that’s a topic for its own series of posts, perhaps some
+other time. For today’s purposes, I’ll just cover how descriptors can help the
+process along. Descriptors are especially useful for model fields, because they
+allow you to integrate specialized Python types with the standard Django
+database API.  Of course, his is all fairly educational. This particular
+process is done much more easily by Django now, if you’re tracking trunk. This
+information is still good to know, though, because the official support in
+Django uses descriptors behind the scenes, and not all situations are covered,
+so you might need to implement this yourself if you find the need.  The base
+class, Field, makes use of a special hook in Django, by defining a method
+called contribute_to_class, and many subclasses override this to provide their
+own functionality. Again, I won’t get into everything that’s possible with
+this, but it provides a very simple solution to our naming problem.
+Essentially, this method gets called for any object that defines it, instead of
+being simply attached to the class as normal. The method uses the following
+definition:
+
+def contribute_to_class(self, cls, name)
+self - the object being assigned to the model
+cls - the model class the object is being assigned to
+name - the name that was used in the assignment.
+
+That’s right, contribute_to_class gets the name that was given to the object
+when it was assigned, so we don’t have to expect anyone to provide it
+explicitly!
+
+Further reading
+
+This isn’t a complete tutorial for subclassing Field, just like the last one
+wasn’t a complete discussion of descriptors. There’s plently more that can be
+done, but the best place I can point to is the source for GeoDjango, where
+Robert Coup so brilliantly implemented descriptors for a very specialized use
+case. Beyond that, be sure to read the source to Malcolm’s recent addition to
+Django’s source, to make this all a lot easier.
