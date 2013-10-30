@@ -1,50 +1,55 @@
-datetime → time tuple
+## datetime → time tuple
 
 >>> dt = datetime.datetime(2010, 12, 31, 23, 59, 59)
 >>> tt = dt.timetuple()
 >>> print tt
 time.struct_time(tm_year=2010, tm_mon=12, tm_mday=31, tm_hour=23, tm_min=59, tm_sec=59, ...)
-datetime → time tuple
-datetime → time stamp
+
+
+## datetime → time stamp
 
 >>> dt = datetime.datetime(2010, 12, 31, 23, 59, 59)
 >>> ts = time.mktime(dt.timetuple())
 >>> print ts
 1293868799.0
-datetime → time stamp
-datetime → string
+
+
+## datetime → string
 
 >>> dt = datetime.datetime(2010, 12, 31, 23, 59, 59)
 >>> st = dt.strftime('%Y-%m-%d %H:%M:%S')
 >>> print st
 2010-12-31 23:59:59
-datetime → string
-time tuple → datetime
+
+
+## time tuple → datetime
 
 >>> tt = (2010, 12, 31, 23, 59, 59, 4, 365, 0)
 >>> dt = datetime.datetime(tt[0], tt[1], tt[2], tt[3], tt[4], tt[5])
 >>> print dt
 2010-12-31 23:59:59
+
 >>>
 >>> dt = datetime.datetime(*tt[0:6])  # same with the code above
 >>> print dt
 2010-12-31 23:59:59
-time tuple → datetime
-time tuple → time stamp
+
+
+## time tuple → time stamp
 
 >>> tt = (2010, 12, 31, 23, 59, 59, 4, 365, 0)
 >>> ts = time.mktime(tt)
 >>> print ts
 1293868799.0
-time tuple → time stamp
-time tuple → string
+
+## time tuple → string
 
 >>> tt = (2010, 12, 31, 23, 59, 59, 4, 365, 0)
 >>> st = time.strftime('%Y-%m-%d %H:%M:%S', tt)
 >>> print st
 2010-12-31 23:59:59
-time tuple → string
-time stamp → datetime
+
+## time stamp → datetime
 
 >>> ts = 1293868799.0
 >>> dt = datetime.datetime.fromtimestamp(ts)     # for local time
@@ -54,8 +59,8 @@ time stamp → datetime
 >>> dt = datetime.datetime.utcfromtimestamp(ts)  # for UTC
 >>> print dt
 2011-01-01 07:59:59
-time stamp → datetime
-time stamp → time tuple
+
+## time stamp → time tuple
 
 >>> ts = 1293868799.0
 >>> tt = time.localtime(ts)
@@ -65,8 +70,8 @@ time.struct_time(tm_year=2010, tm_mon=12, tm_mday=31, tm_hour=23, tm_min=59, tm_
 >>> tt = time.gmtime(ts)
 >>> print tt
 time.struct_time(tm_year=2011, tm_mon=1, tm_mday=1, tm_hour=7, tm_min=59, tm_sec=59, ...)
-time stamp → time tuple
-time stamp → string
+
+## time stamp → string
 
 >>> ts = 1293868799.0
 >>> st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
@@ -76,25 +81,25 @@ time stamp → string
 >>> st = datetime.datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
 >>> print st
 2011-01-01 07:59:59
-time stamp → string
-string → datetime
+
+## string → datetime
 
 >>> s = '2010-12-31 23:59:59'
 >>> dt = datetime.datetime.strptime(s, '%Y-%m-%d %H:%M:%S')
 >>> print dt
 2010-12-31 23:59:59
-string → datetime
-string → time tuple
+
+## string → time tuple
 
 >>> st = '2010-12-31 23:59:59'
 >>> tt = time.strptime(st, '%Y-%m-%d %H:%M:%S')
 >>> print tt
 time.struct_time(tm_year=2010, tm_mon=12, tm_mday=31, tm_hour=23, tm_min=59, tm_sec=59, ...)
-string → time tuple
-string → time stamp
+
+## string → time stamp
 
 >>> s = '2010-12-31 23:59:59'
 >>> ts = time.mktime(time.strptime(s, '%Y-%m-%d %H:%M:%S'))
 >>> print ts
 1293868799.0
-string → time stamp
+
