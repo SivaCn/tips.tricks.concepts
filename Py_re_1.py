@@ -181,8 +181,6 @@ while 1:
     else:
         print 'no match'
 
-Download as text (original file name: Examples/python_201_re_repl.py).
-
 Explanation:
 
 Alternatively, use "mo.span(1)" instead of "mo.start(1)" and "mo.end(1)" in
@@ -209,7 +207,6 @@ while 1:
     result = pat.sub(repl, target)
     print 'result: %s' % result
 
-Download as text (original file name: Examples/python_201_re_repl2.py).
 
 And, finally, you can define a function to be used to insert calculated
 replacements. Here is an example:
@@ -229,7 +226,6 @@ while 1:
     result = pat.sub(replacer, target)
     print 'result: %s' % result
 
-Download as text (original file name: Examples/python_201_re_repl3.py).
 
 Notes:
 
