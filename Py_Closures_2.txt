@@ -1,0 +1,92 @@
+Python closures
+Closures are a great language feature that is provided by most major interpreted
+languages these days. Although the examples given here are specific to Python, 
+once you understand closures in one language, you can probably handle them in any other.
+
+The best way to describe what a closure is would be to give an example. Let's say 
+you have a function like this:
+
+def output(func):
+    print func()
+Now, this may seem pretty brainless, but many Python libraries require you to pass 
+a function object as an argument, which is often used as a callback inside the 
+function. We might use the previous function in the following manner:
+
+def output(func):
+    print func()
+ 
+def hello():
+    return "Hello, World!"
+ 
+output(hello)
+This, of course, would output the text "Hello, World!". I love programming tutorial 
+memes.
+
+But what if we wanted more flexibility in how our function worked? Say we had an 
+array of phrases we wished to output; here's an extremely over-engineered approach 
+we might take.
+
+phrases = {
+    'american':'Hello, World!',
+    'english':'Pip pip!',
+    'german':'Guten Tag!',
+    'french':'Bonjour!'
+}
+ 
+def output(func):
+    print func()
+ 
+for key, phrase in phrases.items():
+    def hello():
+        return phrase
+    output(hello)
+Now that part was pretty straightforward, and besides reminding us that in python 
+we can define a function just about anywhere (take *that*, Java!), we really didn't
+use closures at all. In this next example, we'll save our inner functions to a 
+dictionary that we'll use later on.
+
+phrases = {
+    'american':'Hello, World!',
+    'english':'Pip pip!',
+    'german':'Guten Tag!',
+    'french':'Bonjour!'
+}
+ 
+def output(func):
+    print func()
+ 
+my_dict = {}
+ 
+for key, phrase in phrases.items():
+    def hello():
+        return phrase
+    my_dict[key] = hello
+ 
+for key in my_dict:
+    output(my_dict[key])
+Aha, but something doesn't seem to be working in this case! The issue is related
+to how Python deals with closures; they aren't "closed" until we hit a return statement.
+
+There's an easy enough fix, though. We'll just wrap the whole for loop in its own function:
+
+phrases = {
+    'american':'Hello, World!',
+    'english':'Pip pip!',
+    'german':'Guten Tag!',
+    'french':'Bonjour!'
+}
+ 
+def output(func):
+    print func()
+ 
+my_dict = {}
+ 
+for item in phrases.items():
+    def __loop_closure(key, phrase):
+        def hello():
+            return phrase
+        my_dict[key] = hello
+    __loop_closure(*item)
+ 
+for key in my_dict:
+    output(my_dict[key])
