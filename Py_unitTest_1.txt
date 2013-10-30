@@ -1,0 +1,120 @@
+3. Unit Tests
+
+Unit test and the Python unit test framework provide a convenient way to define
+and run tests that ensure that a Python application produces specified results.
+
+This section, while it will not attempt to explain everything about the unit
+test framework, will provide examples of several straight-forward ways to
+construct and run tests.
+
+Some assumptions:
+
+We are going to develop a software project incrementally. We will not implement
+and release all at once. Therefore, each time we add to our existing code base,
+we need a way to verify that our additions (and fixes) have not caused new
+problems in old code.  Adding new code to existing code will cause problems.
+
+3.1 Defining unit tests
+
+Create a test class.  In the test class, implement a number of methods to
+perform your tests. Name your test methods with the prefix "test". Here is an
+example:
+
+class MyTest:
+    def test_one(self):
+        # some test code
+        pass
+    def test_two(self):
+        # some test code
+        pass
+
+Create a test harness. Here is an example:
+
+# make the test suite.
+def suite():
+    loader = unittest.TestLoader()
+    testsuite = loader.loadTestsFromTestCase(MyTest)
+    return testsuite
+
+# Make the test suite; run the tests.
+def test():
+    testsuite = suite()
+    runner = unittest.TextTestRunner(sys.stdout, verbosity=2)
+    result = runner.run(testsuite)
+
+Here is a more complete example:
+
+import sys, StringIO, string
+import unittest
+import webserv_example_heavy_sub
+
+# A comparison function for case-insenstive sorting.
+def mycmpfunc(arg1, arg2):
+    return cmp(string.lower(arg1), string.lower(arg2))
+
+class XmlTest(unittest.TestCase):
+    def test_import_export1(self):
+        inFile = file('test1_in.xml', 'r')
+        inContent = inFile.read()
+        inFile.close()
+        doc = webserv_example_heavy_sub.parseString(inContent)
+        outFile = StringIO.StringIO()
+        outFile.write('<?xml version="1.0" ?>\n')
+        doc.export(outFile, 0)
+        outContent = outFile.getvalue()
+        outFile.close()
+        self.failUnless(inContent == outContent)
+
+# make the test suite.
+def suite():
+    loader = unittest.TestLoader()
+    # Change the test method prefix: test --> trial.
+    #loader.testMethodPrefix = 'trial'
+    # Change the comparison function that determines the order of tests.
+    #loader.sortTestMethodsUsing = mycmpfunc
+    testsuite = loader.loadTestsFromTestCase(XmlTest)
+    return testsuite
+
+# Make the test suite; run the tests.
+def test_main():
+    testsuite = suite()
+    runner = unittest.TextTestRunner(sys.stdout, verbosity=2)
+    result = runner.run(testsuite)
+
+if __name__ == "__main__":
+    test_main()
+
+Running the above script produces the following output:
+
+test_import_export (__main__.XmlTest) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.035s
+
+OK
+A few notes on this example:
+
+This example tests the ability to parse an xml document test1_in.xml and export
+that document back to XML. The test succeeds if the input XML document and the
+exported XML document are the same.  The code which is being tested parses an
+XML document returned by a request to Amazon Web services. You can learn more
+about Amazon Web services at: http://www.amazon.com/webservices. This code was
+generated from an XML Schema document by generateDS.py. So we are in effect,
+testing generateDS.py. You can find generateDS.py at:
+http://www.rexx.com/~dkuhlman/#generateDS.  Testing for success/failure and
+reporting failures -- Use the methods listed at
+http://www.python.org/doc/current/lib/testcase-objects.html to test for and
+report success and failure. In our example, we used
+"self.failUnless(inContent == outContent)" to ensure that the content we
+parsed and the content that we exported were the same.  Add additional
+tests by adding methods whose names have the prefix "test". If you prefer a
+different prefix for tests names, add something like the following to the
+above script: loader.testMethodPrefix = 'trial' By default, the tests are
+run in the order of their names sorted by the cmp function. So, if need to,
+you can control the order of execution of tests by selecting their names,
+for example, using names like test_1_checkderef, test_2_checkcalc, etc. Or,
+you can change the comparison function by adding something like the
+following to the above script: loader.sortTestMethodsUsing = mycmpfunc As a
+bit of motivation for creating and using unit tests, while developing this
+example, I discovered several errors (or maybe "special features") in
+generateDS.py.
