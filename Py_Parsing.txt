@@ -1,0 +1,1304 @@
+5. Parsing
+
+Python is an excellent language for text analysis.
+
+In some cases, simply splitting lines of text into words will be enough. In
+these cases use string.split().
+
+In other cases, regular expressions may be able to do the parsing you need. If
+so, see the section on regular expressions in this document.
+
+However, in some cases, more complex analysis of input text is required. This
+section describes some of the ways that Python can help you with this complex
+parsing and analysis.
+
+5.1 Special purpose parsers
+
+There are a number of special purpose parsers which you will find in the Python
+standard library:
+
+ConfigParser -- Configuration file parser. See Python Library Reference: 5.10
+    ConfigParser - Configuration file parser.
+
+getopt -- Parse command line arguments. See Python Library Reference: 6.18
+    getopt - Parser for command line options.
+
+optparse -- Powerful parser for command line arguments. (Added in Python 2.3.)
+
+urlparse -- Parse URLs into components. See Python Library Reference: 11.14
+    urlparse - Parse URLs into components.
+
+os.path -- Parsers (and other capabilities) for file paths and names. See
+    Python Library Reference: 6.2 os.path - Common pathname manipulations.
+
+PyXML and the XML parsers -- There is lots of support for parsing and
+    processing XML. Here are a few places to look for support:
+
+The Python standard library -- Python Library Reference: 13. Structured Markup
+    Processing Tools.
+
+PyXML -- http://www.python.org/sigs/xml-sig/.
+
+Gnosis -- http://www.gnosis.cx/download/.
+
+libxml2 and libxslt -- http://xmlsoft.org.
+
+Dave' support for Python and XML -- http://www.rexx.com/~dkuhlman.
+
+
+5.2 Writing a recursive descent parser by hand
+
+For simple grammars, this is not so hard.
+
+You will need to implement:
+
+A recognizer method or function for each production rule in your grammar. Each
+recognizer method begins looking at the current token, then consumes as many
+tokens as needed to recognize it's own production rule. It calls the recognizer
+functions for any non-terminals on its right-hand side.  A tokenizer --
+Something that will enable each recognizer function to get tokens, one by one.
+There are a variety of ways to do this, e.g. (1) a function that produces a
+list of tokens from which recognizers can pop tokens; (2) a generator whose
+next method returns the next token; etc.  Here is an example of a recursive
+descent parser written in Python. After the example is some explanation.
+
+#!/usr/bin/env python
+
+"""
+python_201_rparser.py
+
+A recursive descent parser example.
+
+The grammar:
+
+    Prog ::= Command | Command Prog
+    Command ::= Func_call
+    Func_call ::= Term '(' Func_call_list ')'
+    Func_call_list ::= Func_call | Func_call ',' Func_call_list
+    Term = <word>
+"""
+
+import sys, string, types
+import getopt
+
+## from IPython.Shell import IPShellEmbed
+## ipshell = IPShellEmbed((),
+##     banner = '>>>>>>>> Into IPython >>>>>>>>',
+##     exit_msg = '<<<<<<<< Out of IPython <<<<<<<<')
+
+#
+# Constants
+#
+
+# AST node types
+NoneNodeType = 0
+ProgNodeType = 1
+CommandNodeType = 2
+FuncCallNodeType = 3
+FuncCallListNodeType = 4
+TermNodeType = 5
+
+# Token types
+NoneTokType = 0
+LParTokType = 1
+RParTokType = 2
+WordTokType = 3
+CommaTokType = 4
+EOFTokType = 5
+
+# Dictionary to map node type values to node type names
+NodeTypeDict = {
+    NoneNodeType: 'NoneNodeType',
+    ProgNodeType: 'ProgNodeType',
+    CommandNodeType: 'CommandNodeType',
+    FuncCallNodeType: 'FuncCallNodeType',
+    FuncCallListNodeType: 'FuncCallListNodeType',
+    TermNodeType: 'TermNodeType',
+    }
+
+#
+# Representation of a node in the AST (abstract syntax tree).
+#
+class ASTNode:
+    def __init__(self, nodeType, *args):
+        self.nodeType = nodeType
+        self.children = []
+        for item in args:
+            self.children.append(item)
+    def show(self, level):
+        self.showLevel(level)
+        print 'Node -- Type %s' % NodeTypeDict[self.nodeType]
+        level += 1
+        for child in self.children:
+            if isinstance(child, ASTNode):
+                child.show(level)
+            elif type(child) == types.ListType:
+                for item in child:
+                    item.show(level)
+            else:
+                self.showLevel(level)
+                print 'Child:', child
+    def showLevel(self, level):
+        for idx in range(level):
+            print '   ',
+
+#
+# The recursive descent parser class.
+#   Contains the "recognizer" methods, which implement the grammar
+#   rules (above), one recognizer method for each production rule.
+#
+class ProgParser:
+    def __init__(self):
+        pass
+
+    def parseFile(self, infileName):
+        self.infileName = infileName
+        self.tokens = None
+        self.tokenType = NoneTokType
+        self.token = ''
+        self.lineNo = -1
+        self.infile = file(self.infileName, 'r')
+        self.tokens = genTokens(self.infile)
+        try:
+            self.tokenType, self.token, self.lineNo = self.tokens.next()
+        except StopIteration:
+            raise RuntimeError, 'Empty file'
+        result = self.prog_reco()
+        self.infile.close()
+        self.infile = None
+        return result
+
+    def parseStream(self, instream):
+        self.tokens = genTokens(instream, '<instream>')
+        try:
+            self.tokenType, self.token, self.lineNo = self.tokens.next()
+        except StopIteration:
+            raise RuntimeError, 'Empty file'
+        result = self.prog_reco()
+        return result
+
+    def prog_reco(self):
+        commandList = []
+        while 1:
+            result = self.command_reco()
+            if not result:
+                break
+            commandList.append(result)
+        return ASTNode(ProgNodeType, commandList)
+
+    def command_reco(self):
+        if self.tokenType == EOFTokType:
+            return None
+        result = self.func_call_reco()
+        return ASTNode(CommandNodeType, result)
+
+    def func_call_reco(self):
+        if self.tokenType == WordTokType:
+            term = ASTNode(TermNodeType, self.token)
+            self.tokenType, self.token, self.lineNo = self.tokens.next()
+            if self.tokenType == LParTokType:
+                self.tokenType, self.token, self.lineNo = self.tokens.next()
+                result = self.func_call_list_reco()
+                if result:
+                    if self.tokenType == RParTokType:
+                        self.tokenType, self.token, self.lineNo = \
+                            self.tokens.next()
+                        return ASTNode(FuncCallNodeType, term, result)
+                    else:
+                        raise ParseError(self.lineNo, 'missing right paren')
+                else:
+                    raise ParseError(self.lineNo, 'bad func call list')
+            else:
+                raise ParseError(self.lineNo, 'missing left paren')
+        else:
+            return None
+
+    def func_call_list_reco(self):
+        terms = []
+        while 1:
+            result = self.func_call_reco()
+            if not result:
+                break
+            terms.append(result)
+            if self.tokenType != CommaTokType:
+                break
+            self.tokenType, self.token, self.lineNo = self.tokens.next()
+        return ASTNode(FuncCallListNodeType, terms)
+
+#
+# The parse error exception class.
+#
+class ParseError(Exception):
+    def __init__(self, lineNo, msg):
+        RuntimeError.__init__(self, msg)
+        self.lineNo = lineNo
+        self.msg = msg
+    def getLineNo(self):
+        return self.lineNo
+    def getMsg(self):
+        return self.msg
+
+def is_word(token):
+    for letter in token:
+        if letter not in string.ascii_letters:
+            return None
+    return 1
+
+#
+# Generate the tokens.
+# Usage:
+#    gen = genTokens(infile)
+#    tokType, tok, lineNo = gen.next()
+#    ...
+def genTokens(infile):
+    lineNo = 0
+    while 1:
+        lineNo += 1
+        try:
+            line = infile.next()
+        except:
+            yield (EOFTokType, None, lineNo)
+        toks = line.split()
+        for tok in toks:
+            if is_word(tok):
+                tokType = WordTokType
+            elif tok == '(':
+                tokType = LParTokType
+            elif tok == ')':
+                tokType = RParTokType
+            elif tok == ',':
+                tokType = CommaTokType
+            yield (tokType, tok, lineNo)
+
+def test(infileName):
+    parser = ProgParser()
+    #ipshell('(test) #1\nCtrl-D to exit')
+    result = None
+    try:
+        result = parser.parseFile(infileName)
+    except ParseError, exp:
+        sys.stderr.write('ParseError: (%d) %s\n' % \
+            (exp.getLineNo(), exp.getMsg()))
+    if result:
+        result.show(0)
+
+USAGE_TEXT = """
+Usage:
+    python rparser.py [options] <inputfile>
+Options:
+    -h, --help      Display this help message.
+Example:
+    python rparser.py myfile.txt
+"""
+
+def usage():
+    print USAGE_TEXT
+    sys.exit(-1)
+
+def main():
+    args = sys.argv[1:]
+    try:
+        opts, args = getopt.getopt(args, 'h', ['help'])
+    except:
+        usage()
+    relink = 1
+    for opt, val in opts:
+        if opt in ('-h', '--help'):
+            usage()
+    if len(args) != 1:
+        usage()
+    test(args[0])
+
+if __name__ == '__main__':
+    main()
+    #import pdb
+    #pdb.run('main()')
+Download as text (original file name: Examples/python_201_rparser.py).
+And, here is a sample of the data we can apply this parser to:
+
+aaa ( )
+bbb ( ccc ( ) )
+ddd ( eee ( ) , fff ( ggg ( ) , hhh ( ) , iii ( ) ) )
+
+Download as text (original file name: Examples/python_201_rparser_data.txt).
+Comments and explanation:
+
+The tokenizer is a Python generator. It returns a Python generator that can
+produce "(tokType, tok, lineNo)" tuples. Our tokenizer is so simple-minded that
+we have to separate all of our tokens with whitespace. (A little later, we'll
+see how to use Plex to overcome this limitation.) The parser
+class (ProgParser) contains the recognizer methods that implement the
+production rules. Each of these methods recognizes a syntactic construct
+defined by a rule. In our example, these methods have names that end with
+"_reco".  We could have, alternatively, implemented our recognizers as global
+functions, instead of as methods in a class. However, using a class gives us a
+place to "hang" the variables that are needed across methods and saves us from
+having to use ("evil") global variables.  A recognizer method recognizes a
+terminals (syntactic elements on the right-hand side of the grammar rule for
+           which there is no grammar rule) by (1) checking the token type and
+the token value, and then (2) calling the tokenizer to get the next token
+(because it has consumed a token).  A recognizer method checks for and
+processes a non-terminal (syntactic elements on the right-hand side for which
+                          there is a grammar rule) by calling the recognizer
+method that implements that non-terminal.  If a recognizer method finds a
+syntax error, it raises an exception of class ParserError.  Since our example
+recursive descent parser creates an AST (an abstract syntax tree), whenever a
+recognizer method successfully recognizes a syntactic construct, it creates an
+instance of class ASTNode to represent it and returns that instance to its
+caller. The instance of ASTNode has a node type and contains child nodes which
+were constructed by recognizer methods called by this one (i.e. that represent
+non-terminals on the right-hand side of a grammar rule).  Each
+time a recognizer method "consumes a token", it calls the tokenizer to get the
+next token (and token type and line number).  The tokenizer returns a token
+type in addition to the token value. It also returns a line number for error
+reporting.  The syntax tree is constructed from instances of class ASTNode.
+The ASTNode class has a show method, which walks the AST and produces output.
+You can imagine that a similar method could do code generation. And, you should
+consider the possibility of writing analogous tree walk methods that perform
+tasks such as optimization, annotation of the AST, etc.
+
+
+5.3 Creating a lexer/tokenizer with Plex
+
+Lexical analysis -- The tokenizer in our recursive descent parser example was
+(for demonstration purposes) overly simple. You can always write more complex
+tokenizers by hand. However, for more complex (and real) tokenizers, you may
+want to use a tool to build your tokenizer.
+
+In this section we'll describe Plex and use it to produce a tokenizer for our
+recursive descent parser.
+
+You can obtain Plex at http://www.cosc.canterbury.ac.nz/~greg/python/Plex/.
+
+In order to use it, you may want to add Plex-1.1.4/Plex to your PYTHONPATH.
+
+Here is a simple example from the Plex tutorial:
+
+#!/usr/bin/env python
+
+# python_201_plex1.py
+#
+# Sample Plex lexer
+#
+
+import sys
+import Plex
+
+def test(infileName):
+    letter = Plex.Range("AZaz")
+    digit =  Plex.Range("09")
+    name = letter +  Plex.Rep(letter | digit)
+    number =  Plex.Rep1(digit)
+    space =  Plex.Any(" \t\n")
+    comment =  Plex.Str('"') +  Plex.Rep( Plex.AnyBut('"')) +  Plex.Str('"')
+    resword =  Plex.Str("if", "then", "else", "end")
+    lexicon =  Plex.Lexicon([
+        (resword,         'keyword'),
+        (name,            'ident'),
+        (number,          'int'),
+        ( Plex.Any("+-*/=<>"),   Plex.TEXT),
+        (space,  Plex.IGNORE),
+        (comment, 'comment'),
+    ])
+    infile = open(infileName, "r")
+    scanner =  Plex.Scanner(lexicon, infile, infileName)
+    while 1:
+        token = scanner.read()
+        position = scanner.position()
+        print '(%d, %d) tok: %s  tokType: %s' % \
+            (position[1], position[2], token[1], token[0])
+        if token[0] is None:
+            break
+
+USAGE_TEXT = """
+Usage: python python_201_plex1.py <infile>
+"""
+
+def usage():
+    print USAGE_TEXT
+    sys.exit(-1)
+
+def main():
+    args = sys.argv[1:]
+    if len(args) != 1:
+        usage()
+    infileName = args[0]
+    test(infileName)
+
+if __name__ == '__main__':
+    main()
+    #import pdb
+    #pdb.run('main()')
+Download as text (original file name: Examples/python_201_plex1.py).
+Comments and explanation:
+
+Create a lexicon from scanning patterns.
+
+See the Plex tutorial and reference (and below) for more information on how to
+construct the patterns that match various tokens.  Create a scanner with a
+lexicon, an input file, and an input file name.  The call "scanner.read()" gets
+the next token. It returns a tuple containing (1) the token value and (2) the
+token type.  The call "scanner.position()" gets the position of the current
+token. It returns a tuple containing (1) the input file name, (2) the line
+number, and (3) the column number.  And, here are some comments on constructing
+the patterns used in a lexicon:
+
+Range constructs a pattern that matches any character in the range.  Rep
+constructs a pattern that matches a sequence of zero or more items.  Rep1
+constructs a pattern that matches a sequence of one or more items.  "pat1 +
+pat2" constructs a pattern that matches a sequence containing pat1 followed by
+pat2.  "pat1 | pat2" constructs a pattern that matches either pat1 or pat2.
+Any constructs a pattern that matches any one character in its argument.
+
+Now let's revisit our recursive descent parser, this time with a tokenizer
+built with Plex. The tokenizer is trivial, but will serve as an example of how
+to hook it into a parser.
+
+#!/usr/bin/env python
+
+"""
+python_201_rparser_plex.py
+
+A recursive descent parser example.
+This example uses Plex to implement a tokenizer.
+
+The grammar:
+
+    Prog ::= Command | Command Prog
+    Command ::= Func_call
+    Func_call ::= Term '(' Func_call_list ')'
+    Func_call_list ::= Func_call | Func_call ',' Func_call_list
+    Term = <word>
+
+"""
+
+import sys, string, types
+import getopt
+import Plex
+
+## from IPython.Shell import IPShellEmbed
+## ipshell = IPShellEmbed((),
+##     banner = '>>>>>>>> Into IPython >>>>>>>>',
+##     exit_msg = '<<<<<<<< Out of IPython <<<<<<<<')
+
+#
+# Constants
+#
+
+# AST node types
+NoneNodeType =         0
+ProgNodeType =         1
+CommandNodeType =      2
+FuncCallNodeType =     3
+FuncCallListNodeType = 4
+TermNodeType =         5
+
+# Token types
+NoneTokType =  0
+LParTokType =  1
+RParTokType =  2
+WordTokType =  3
+CommaTokType = 4
+EOFTokType =   5
+
+# Dictionary to map node type values to node type names
+NodeTypeDict = {
+    NoneNodeType:         'NoneNodeType',
+    ProgNodeType:         'ProgNodeType',
+    CommandNodeType:      'CommandNodeType',
+    FuncCallNodeType:     'FuncCallNodeType',
+    FuncCallListNodeType: 'FuncCallListNodeType',
+    TermNodeType:         'TermNodeType',
+    }
+
+#
+# Representation of a node in the AST (abstract syntax tree).
+#
+class ASTNode:
+    def __init__(self, nodeType, *args):
+        self.nodeType = nodeType
+        self.children = []
+        for item in args:
+            self.children.append(item)
+    def show(self, level):
+        self.showLevel(level)
+        print 'Node -- Type %s' % NodeTypeDict[self.nodeType]
+        level += 1
+        for child in self.children:
+            if isinstance(child, ASTNode):
+                child.show(level)
+            elif type(child) == types.ListType:
+                for item in child:
+                    item.show(level)
+            else:
+                self.showLevel(level)
+                print 'Child:', child
+    def showLevel(self, level):
+        for idx in range(level):
+            print '   ',
+
+#
+# The recursive descent parser class.
+#   Contains the "recognizer" methods, which implement the grammar
+#   rules (above), one recognizer method for each production rule.
+#
+class ProgParser:
+    def __init__(self):
+        pass
+
+    def parseFile(self, infileName):
+        self.tokens = None
+        self.tokenType = NoneTokType
+        self.token = ''
+        self.lineNo = -1
+        self.infile = file(infileName, 'r')
+        self.tokens = genTokens(self.infile, infileName)
+        try:
+            self.tokenType, self.token, self.lineNo = self.tokens.next()
+        except StopIteration:
+            raise RuntimeError, 'Empty file'
+        result = self.prog_reco()
+        self.infile.close()
+        self.infile = None
+        return result
+
+    def parseStream(self, instream):
+        self.tokens = None
+        self.tokenType = NoneTokType
+        self.token = ''
+        self.lineNo = -1
+        self.tokens = genTokens(self.instream, '<stream>')
+        try:
+            self.tokenType, self.token, self.lineNo = self.tokens.next()
+        except StopIteration:
+            raise RuntimeError, 'Empty stream'
+        result = self.prog_reco()
+        self.infile.close()
+        self.infile = None
+        return result
+
+    def prog_reco(self):
+        commandList = []
+        while 1:
+            result = self.command_reco()
+            if not result:
+                break
+            commandList.append(result)
+        return ASTNode(ProgNodeType, commandList)
+
+    def command_reco(self):
+        if self.tokenType == EOFTokType:
+            return None
+        result = self.func_call_reco()
+        return ASTNode(CommandNodeType, result)
+
+    def func_call_reco(self):
+        if self.tokenType == WordTokType:
+            term = ASTNode(TermNodeType, self.token)
+            self.tokenType, self.token, self.lineNo = self.tokens.next()
+            if self.tokenType == LParTokType:
+                self.tokenType, self.token, self.lineNo = self.tokens.next()
+                result = self.func_call_list_reco()
+                if result:
+                    if self.tokenType == RParTokType:
+                        self.tokenType, self.token, self.lineNo = \
+                            self.tokens.next()
+                        return ASTNode(FuncCallNodeType, term, result)
+                    else:
+                        raise ParseError(self.lineNo, 'missing right paren')
+                else:
+                    raise ParseError(self.lineNo, 'bad func call list')
+            else:
+                raise ParseError(self.lineNo, 'missing left paren')
+        else:
+            return None
+
+    def func_call_list_reco(self):
+        terms = []
+        while 1:
+            result = self.func_call_reco()
+            if not result:
+                break
+            terms.append(result)
+            if self.tokenType != CommaTokType:
+                break
+            self.tokenType, self.token, self.lineNo = self.tokens.next()
+        return ASTNode(FuncCallListNodeType, terms)
+
+#
+# The parse error exception class.
+#
+class ParseError(Exception):
+    def __init__(self, lineNo, msg):
+        RuntimeError.__init__(self, msg)
+        self.lineNo = lineNo
+        self.msg = msg
+    def getLineNo(self):
+        return self.lineNo
+    def getMsg(self):
+        return self.msg
+
+#
+# Generate the tokens.
+# Usage - example
+#    gen = genTokens(infile)
+#    tokType, tok, lineNo = gen.next()
+#    ...
+def genTokens(infile, infileName):
+    letter = Plex.Range("AZaz")
+    digit =  Plex.Range("09")
+    name = letter +  Plex.Rep(letter | digit)
+    lpar = Plex.Str('(')
+    rpar = Plex.Str(')')
+    comma = Plex.Str(',')
+    comment = Plex.Str("#") + Plex.Rep(Plex.AnyBut("\n"))
+    space = Plex.Any(" \t\n")
+    lexicon = Plex.Lexicon([
+        (name,      'word'),
+        (lpar,      'lpar'),
+        (rpar,      'rpar'),
+        (comma,     'comma'),
+        (comment,   Plex.IGNORE),
+        (space,     Plex.IGNORE),
+    ])
+    scanner = Plex.Scanner(lexicon, infile, infileName)
+    while 1:
+        tokenType, token = scanner.read()
+        name, lineNo, columnNo = scanner.position()
+        if tokenType == None:
+            tokType = EOFTokType
+            token = None
+        elif tokenType == 'word':
+            tokType = WordTokType
+        elif tokenType == 'lpar':
+            tokType = LParTokType
+        elif tokenType == 'rpar':
+            tokType = RParTokType
+        elif tokenType == 'comma':
+            tokType = CommaTokType
+        else:
+            tokType = NoneTokType
+        tok = token
+        yield (tokType, tok, lineNo)
+
+def test(infileName):
+    parser = ProgParser()
+    #ipshell('(test) #1\nCtrl-D to exit')
+    result = None
+    try:
+        result = parser.parseFile(infileName)
+    except ParseError, exp:
+        sys.stderr.write('ParseError: (%d) %s\n' % \
+            (exp.getLineNo(), exp.getMsg()))
+    if result:
+        result.show(0)
+
+USAGE_TEXT = """
+Usage:
+    python python_201_rparser_plex.py [options] <inputfile>
+Options:
+    -h, --help      Display this help message.
+Example:
+    python python_201_rparser_plex.py myfile.txt
+"""
+
+def usage():
+    print USAGE_TEXT
+    sys.exit(-1)
+
+def main():
+    args = sys.argv[1:]
+    try:
+        opts, args = getopt.getopt(args, 'h', ['help'])
+    except:
+        usage()
+    for opt, val in opts:
+        if opt in ('-h', '--help'):
+            usage()
+    if len(args) != 1:
+        usage()
+    infileName = args[0]
+    test(infileName)
+
+if __name__ == '__main__':
+    main()
+    #import pdb
+    #pdb.run('main()')
+Download as text (original file name: Examples/python_201_rparser_plex.py).
+And, here is a sample of the data we can apply this parser to:
+
+# Test for recursive descent parser and Plex.
+# Command #1
+aaa()
+# Command #2
+bbb (ccc())    # An end of line comment.
+# Command #3
+ddd(eee(), fff(ggg(), hhh(), iii()))
+# End of test
+
+We can now put comments in our input, and they will be ignored. Comments begin
+with a "#" and continue to the end of line. See the definition of comment in
+function genTokens.  This tokenizer does not require us to separate tokens with
+whitespace as did the simple tokenizer in the earlier version of our recursive
+descent parser.  The changes we made over the earlier version were to: Import
+Plex.  Replace the definition of the tokenizer function genTokens.  Change the
+call to genTokens so that the call passes in the file name, which is needed to
+create the scanner.  Our new version of genTokens does the following: Create
+patterns for scanning.  Create a lexicon (an instance of Plex.Lexicon), which
+uses the patterns.  Create a scanner (an instance of Plex.Scanner), which uses
+the lexicon.  Execute a loop that reads tokens (from the scanner) and "yields"
+each one.
+
+5.4 A survey of existing tools
+
+For complex parsing tasks, you may want to consider the following tools:
+
+kwParsing -- A parser generator in Python -- http://www.pythonpros.com/arw/kwParsing/kwParsing.html.
+PLY -- Python Lex-Yacc -- http://systems.cs.uchicago.edu/ply/.
+PyLR -- Fast LR parsing in python -- http://starship.python.net/crew/scott/PyLR.html.
+Yapps -- The Yapps Parser Generator System -- http://theory.stanford.edu/~amitp/Yapps/.
+And, for lexical analysis, you may also want to look at -- Using Regular Expressions for Lexical Analysis.
+
+5.5 Creating a parser with PLY
+
+In this section we will show how to implement our parser example with PLY.
+
+First down-load PLY. It is available at http://systems.cs.uchicago.edu/ply/.
+
+Then add the PLY directory to your PYTHONPATH.
+
+Learn how to construct lexers and parsers with PLY by reading doc/ply.html in
+the distribution of PLY and by looking at the examples in the distribution.
+
+For those of you who want a more complex example, see A Python Parser for the
+RELAX NG Compact Syntax, which is implemented with PLY.
+
+Now, here is our example parser. Comments and explanations are below.
+
+#!/usr/bin/env python
+"""
+python_201_parser_ply.py
+
+A parser example.
+This example uses PLY to implement a lexer and parser.
+
+The grammar:
+
+    Prog ::= Command*
+    Command ::= Func_call
+    Func_call ::= Term '(' Func_call_list ')'
+    Func_call_list ::= Func_call*
+    Term = <word>
+
+"""
+
+import sys, types
+import getopt
+import lex
+import yacc
+
+#
+# Globals
+#
+
+startlinepos = 0
+
+#
+# Constants
+#
+
+# AST node types
+NoneNodeType =         0
+ProgNodeType =         1
+CommandNodeType =      2
+CommandListNodeType =  3
+FuncCallNodeType =     4
+FuncCallListNodeType = 5
+TermNodeType =         6
+
+# Dictionary to map node type values to node type names
+NodeTypeDict = {
+    NoneNodeType:         'NoneNodeType',
+    ProgNodeType:         'ProgNodeType',
+    CommandNodeType:      'CommandNodeType',
+    CommandListNodeType:  'CommandListNodeType',
+    FuncCallNodeType:     'FuncCallNodeType',
+    FuncCallListNodeType: 'FuncCallListNodeType',
+    TermNodeType:         'TermNodeType',
+    }
+
+#
+# Representation of a node in the AST (abstract syntax tree).
+#
+class ASTNode:
+    def __init__(self, nodeType, *args):
+        self.nodeType = nodeType
+        self.children = []
+        for item in args:
+            self.children.append(item)
+    def append(self, item):
+        self.children.append(item)
+    def show(self, level):
+        self.showLevel(level)
+        print 'Node -- Type: %s' % NodeTypeDict[self.nodeType]
+        level += 1
+        for child in self.children:
+            if isinstance(child, ASTNode):
+                child.show(level)
+            elif type(child) == types.ListType:
+                for item in child:
+                    item.show(level)
+            else:
+                self.showLevel(level)
+                print 'Value:', child
+    def showLevel(self, level):
+        for idx in range(level):
+            print '   ',
+
+#
+# Exception classes
+#
+class LexerError(Exception):
+    def __init__(self, msg, lineno, columnno):
+        self.msg = msg
+        self.lineno = lineno
+        self.columnno = columnno
+    def show(self):
+        sys.stderr.write('Lexer error (%d, %d) %s\n' % \
+            (self.lineno, self.columnno, self.msg))
+
+class ParserError(Exception):
+    def __init__(self, msg, lineno, columnno):
+        self.msg = msg
+        self.lineno = lineno
+        self.columnno = columnno
+    def show(self):
+        sys.stderr.write('Parser error (%d, %d) %s\n' % \
+            (self.lineno, self.columnno, self.msg))
+
+#
+# Lexer specification
+#
+tokens = (
+    'NAME',
+    'LPAR','RPAR',
+    'COMMA',
+    )
+
+# Tokens
+
+t_LPAR =   r'\('
+t_RPAR =   r'\)'
+t_COMMA =  r'\,'
+t_NAME =   r'[a-zA-Z_][a-zA-Z0-9_]*'
+
+# Ignore whitespace
+t_ignore = ' \t'
+
+# Ignore comments ('#' to end of line)
+def t_COMMENT(t):
+    r'\#[^\n]*'
+    pass
+
+def t_newline(t):
+    r'\n+'
+    global startlinepos
+    startlinepos = t.lexer.lexpos - 1
+    t.lineno += t.value.count("\n")
+
+def t_error(t):
+    global startlinepos
+    msg = "Illegal character '%s'" % (t.value[0])
+    columnno = t.lexer.lexpos - startlinepos
+    raise LexerError(msg, t.lineno, columnno)
+
+#
+# Parser specification
+#
+def p_prog(t):
+    'prog : command_list'
+    t[0] = ASTNode(ProgNodeType, t[1])
+
+def p_command_list_1(t):
+    'command_list : command'
+    t[0] = ASTNode(CommandListNodeType, t[1])
+
+def p_command_list_2(t):
+    'command_list : command_list command'
+    t[1].append(t[2])
+    t[0] = t[1]
+
+def p_command(t):
+    'command : func_call'
+    t[0] = ASTNode(CommandNodeType, t[1])
+
+def p_func_call_1(t):
+    'func_call : term LPAR RPAR'
+    t[0] = ASTNode(FuncCallNodeType, t[1])
+
+def p_func_call_2(t):
+    'func_call : term LPAR func_call_list RPAR'
+    t[0] = ASTNode(FuncCallNodeType, t[1],  t[3])
+
+def p_func_call_list_1(t):
+    'func_call_list : func_call'
+    t[0] = ASTNode(FuncCallListNodeType, t[1])
+
+def p_func_call_list_2(t):
+    'func_call_list : func_call_list COMMA func_call'
+    t[1].append(t[3])
+    t[0] = t[1]
+
+def p_term(t):
+    'term : NAME'
+    t[0] = ASTNode(TermNodeType, t[1])
+
+def p_error(t):
+    global startlinepos
+    msg = "Syntax error at '%s'" % t.value
+    columnno = t.lexer.lexpos - startlinepos
+    raise ParserError(msg, t.lineno, columnno)
+
+#
+# Parse the input and display the AST (abstract syntax tree)
+#
+def parse(infileName):
+    startlinepos = 0
+    # Build the lexer
+    lex.lex(debug=1)
+    # Build the parser
+    yacc.yacc()
+    # Read the input
+    infile = file(infileName, 'r')
+    content = infile.read()
+    infile.close()
+    try:
+        # Do the parse
+        result = yacc.parse(content)
+        # Display the AST
+        result.show(0)
+    except LexerError, exp:
+        exp.show()
+    except ParserError, exp:
+        exp.show()
+
+USAGE_TEXT = """
+Usage:
+    python python_201_parser_ply.py [options] <inputfile>
+Options:
+    -h, --help      Display this help message.
+Example:
+    python python_201_parser_ply.py testfile.prog
+"""
+
+def usage():
+    print USAGE_TEXT
+    sys.exit(-1)
+
+def main():
+    args = sys.argv[1:]
+    try:
+        opts, args = getopt.getopt(args, 'h', ['help'])
+    except:
+        usage()
+    relink = 1
+    for opt, val in opts:
+        if opt in ('-h', '--help'):
+            usage()
+    if len(args) != 1:
+        usage()
+    infileName = args[0]
+    parse(infileName)
+
+if __name__ == '__main__':
+    main()
+    #import pdb
+    #pdb.run('main()')
+Download as text (original file name: Examples/python_201_parser_ply.py).
+Applying this parser to the following input:
+
+# Test for recursive descent parser and Plex.
+# Command #1
+aaa()
+# Command #2
+bbb (ccc())    # An end of line comment.
+# Command #3
+ddd(eee(), fff(ggg(), hhh(), iii()))
+# End of test
+Download as text (original file name: Examples/python_201_parser_ply_data.txt).
+produces the following output:
+
+Node -- Type: ProgNodeType
+    Node -- Type: CommandListNodeType
+        Node -- Type: CommandNodeType
+            Node -- Type: FuncCallNodeType
+                Node -- Type: TermNodeType
+                    Value: aaa
+        Node -- Type: CommandNodeType
+            Node -- Type: FuncCallNodeType
+                Node -- Type: TermNodeType
+                    Value: bbb
+                Node -- Type: FuncCallListNodeType
+                    Node -- Type: FuncCallNodeType
+                        Node -- Type: TermNodeType
+                            Value: ccc
+        Node -- Type: CommandNodeType
+            Node -- Type: FuncCallNodeType
+                Node -- Type: TermNodeType
+                    Value: ddd
+                Node -- Type: FuncCallListNodeType
+                    Node -- Type: FuncCallNodeType
+                        Node -- Type: TermNodeType
+                            Value: eee
+                    Node -- Type: FuncCallNodeType
+                        Node -- Type: TermNodeType
+                            Value: fff
+                        Node -- Type: FuncCallListNodeType
+                            Node -- Type: FuncCallNodeType
+                                Node -- Type: TermNodeType
+                                    Value: ggg
+                            Node -- Type: FuncCallNodeType
+                                Node -- Type: TermNodeType
+                                    Value: hhh
+                            Node -- Type: FuncCallNodeType
+                                Node -- Type: TermNodeType
+                                    Value: iii
+Comments and explanation:
+
+Creating the syntax tree -- Basically, each rule (1) recognizes a non-terminal,
+(2) creates a node (possibly using the values from the right-hand side of the
+                    rule), and (3) returns the node by setting the value of
+t[0]. A deviation from this is the processing of sequences, discussed below.
+Sequences -- p_command_list_1 and p_command_list_1 show how to handle sequences
+of items. In this case: p_command_list_1 recognizes a command and creates an
+instance of ASTNode with type CommandListNodeType and adds the command to it as
+a child, and p_command_list_2 recognizes an additional command and adds it (as
+                                                                            a
+                                                                            child)
+to the instance of ASTNode that represents the list.  Distinguishing between
+different forms of the same rule -- In order to process alternatives to the
+same production rule differently, we use different functions with different
+implementations. For example, we use: p_func_call_1 to recognize and process
+"func_call : term LPAR RPAR" (a function call without arguments), and
+p_func_call_2 to recognize and process "func_call : term LPAR func_call_list
+RPAR" (a function call with arguments).  Reporting errors -- Our parser reports
+the first error and quits. We've done this by raising an exception when we find
+an error. We implement two exception classes: LexerError and ParserError.
+Implementing more than one exception class enables us to distinguish between
+different classes of errors (note the multiple except: clauses on the try:
+                             statement in function parse). And, we use an
+instance of the exception class as a container in order to "bubble up"
+information about the error (e.g. a message, a line number, and a column
+                             number).
+
+5.6 Creating a parser with pyparsing
+
+pyparsing is a relatively new parsing package for Python. It was implemented
+and is supported by Paul McGuire and it shows promise. It appears especially
+easy to use and seems especially appropriate in particular for quick parsing
+tasks, although it has features that make some complex parsing tasks easy. It
+follows a very natural Python style for constructing parsers.
+
+Good documentation comes with the pyparsing distribution. See file
+HowToUseParsing.html. So, I won't try to repeat that here. What follows is an
+attempt to provide several quick examples to help you solve simple parsing
+tasks as quickly as possible.
+
+You will also want to look at the samples in the examples directory, which are
+very helpful. My examples below are fairly simple. You can see more of the
+ability of pyparsing to handle complex tasks in the examples.
+
+Where to get it - You can find pyparsing at: http://pyparsing.sourceforge.net/.
+
+How to install it - Put the pyparsing module somewhere on your PYTHONPATH.
+
+And now, here are a few examples.
+
+5.6.1 Parsing comma-delimeted lines
+
+Here is a simple grammar for lines containing fields separated by commas:
+
+import sys
+from pyparsing import alphanums, ZeroOrMore, Word
+
+fieldDef = Word(alphanums)
+lineDef = fieldDef + ZeroOrMore("," + fieldDef)
+
+args = sys.argv[1:]
+if len(args) != 1:
+    print 'usage: python pyparsing_test1.py <datafile.txt>'
+    sys.exit(-1)
+infilename = sys.argv[1]
+infile = file(infilename, 'r')
+for line in infile:
+    fields = lineDef.parseString(line)
+    print fields
+Notes and explanation:
+
+Note how the grammar is constructed from normal Python calls to function and
+object/class constructors. I've constructed the parser in-line because my
+examples are simple, but constructing the parser in a function or even a module
+might make sense for more complex grammars. pyparsing makes it easy to use
+these these different styles.  Use "+" to specify a sequence. In our example, a
+lineDef is a fieldDef followed by ....  Use ZeroOrMore to specify repetition.
+In our example, a lineDef is a fieldDef followed by zero or more occurances of
+comma and fieldDef. There is also OneOrMore when you want to require at least
+one occurance.  Parsing comma delimited text happens so frequently that
+pyparsing provides a shortcut. Replace: lineDef = fieldDef + ZeroOrMore("," +
+fieldDef)
+
+
+with:
+
+lineDef = delimitedList(fieldDef)
+
+And note that delimitedList takes an optional argument delim used to specify
+the delimiter. The default is a comma.
+
+5.6.2 Parsing functors
+
+This example parses expressions of the form ``func(arg1, arg2, arg3)''.
+
+from pyparsing import Word, alphas, alphanums, nums, ZeroOrMore, Literal
+
+lparen = Literal("(")
+rparen = Literal(")")
+identifier = Word(alphas, alphanums + "_")
+integer  = Word( nums )
+functor = identifier
+arg = identifier | integer
+args = arg + ZeroOrMore("," + arg)
+expression = functor + lparen + args + rparen
+
+content = raw_input("Enter an expression: ")
+parsedContent = expression.parseString(content)
+print parsedContent
+Explanation:
+
+Use Literal to specify a fixed string that is to be matched exactly. In our
+example, a lparen is a ``(``.  Word takes an optional second argument. With a
+single (string) argument, it matches any contiguous
+word made up of characters in the string. With two
+(string) arguments it matches a word whose first
+character is in the first string and whose remaining
+characters are in the second string. So, our
+definition of identifier matches a word whose first
+character is an alpha and whose remaining characters
+are alpha-numerics or underscore. As another example,
+you can think of Word("0123456789") as analogous to a
+regexp containing the pattern "[0-9]+".  Use a
+vertical bar for alternation. In our example, an arg
+can be either an identifier or an integer.
+
+5.6.3 Parsing names, phone numbers, etc.
+
+This example parses expressions having the following form:
+
+Input format:
+
+[name]         [phone]       [city, state zip]
+
+Last, first    111-222-3333  city, ca 99999
+Here is the parser:
+
+import sys
+from pyparsing import alphas, nums, ZeroOrMore, Word, Group, Suppress, Combine
+
+lastname = Word(alphas)
+firstname = Word(alphas)
+city = Group(Word(alphas) + ZeroOrMore(Word(alphas)))
+state = Word(alphas, exact=2)
+zip = Word(nums, exact=5)
+
+name = Group(lastname + Suppress(",") + firstname)
+phone = Combine(Word(nums, exact=3) + "-" + Word(nums, exact=3) + "-" + Word(nums, exact=4))
+location = Group(city + Suppress(",") + state + zip)
+
+record = name + phone + location
+
+args = sys.argv[1:]
+if len(args) != 1:
+    print 'usage: python pyparsing_test3.py <datafile.txt>'
+    sys.exit(-1)
+infilename = sys.argv[1]
+infile = file(infilename, 'r')
+for line in infile:
+    line = line.strip()
+    if line and line[0] != "#":
+        fields = record.parseString(line)
+        print fields
+And, here is some sample input:
+
+Jabberer, Jerry          111-222-3333   Bakersfield, CA 95111
+Kackler, Kerry           111-222-3334   Fresno, CA 95112
+Louderdale, Larry        111-222-3335   Los Angeles, CA 94001
+Here is output from parsing the above input:
+
+[['Jabberer', 'Jerry'], '111-222-3333', [['Bakersfield'], 'CA', '95111']]
+[['Kackler', 'Kerry'], '111-222-3334', [['Fresno'], 'CA', '95112']]
+[['Louderdale', 'Larry'], '111-222-3335', [['Los', 'Angeles'], 'CA', '94001']]
+Comments:
+
+We use the ``len=n'' argument to the Word constructor to restict the parser to
+accepting a specific number of characters, for example in the zip code and
+phone number. Word also accepts ``min=n'' and ``max=n'' to enable you to
+restrict the length of a word to within a range.  We use Group to group the
+parsed results into sub-lists, for example in the definition of city and name.
+Group enables us to organize the parse results into simple parse trees.  We use
+Combine to join parsed results back into a single string. For example, in the
+phone number, we can require dashes and yet join the results back into a single
+string.  We use Suppress to remove unneeded sub-elements from parsed results.
+For example, we do not need the comma between last and first name.
+
+5.6.4 A more complex example
+
+This example (thanks to Paul McGuire) parses a more complex structure and
+produces a dictionary.
+
+Here is the code:
+
+from pyparsing import Literal, Word, Group, Dict, ZeroOrMore, alphas, nums,\
+    delimitedList
+
+import pprint
+
+testData = """
++-------+------+------+------+------+------+------+------+------+
+|       |  A1  |  B1  |  C1  |  D1  |  A2  |  B2  |  C2  |  D2  |
++=======+======+======+======+======+======+======+======+======+
+| min   |   7  |  43  |   7  |  15  |  82  |  98  |   1  |  37  |
+| max   |  11  |  52  |  10  |  17  |  85  | 112  |   4  |  39  |
+| ave   |   9  |  47  |   8  |  16  |  84  | 106  |   3  |  38  |
+| sdev  |   1  |   3  |   1  |   1  |   1  |   3  |   1  |   1  |
++-------+------+------+------+------+------+------+------+------+
+"""
+
+# Define grammar for datatable
+heading = (Literal(
+"+-------+------+------+------+------+------+------+------+------+") +
+"|       |  A1  |  B1  |  C1  |  D1  |  A2  |  B2  |  C2  |  D2  |" +
+"+=======+======+======+======+======+======+======+======+======+").suppress()
+
+vert = Literal("|").suppress()
+number = Word(nums)
+rowData = Group( vert + Word(alphas) + vert + delimitedList(number,"|") +
+vert )
+trailing = Literal(
+"+-------+------+------+------+------+------+------+------+------+").suppress()
+
+datatable = heading + Dict( ZeroOrMore(rowData) ) + trailing
+
+# Now parse data and print results
+data = datatable.parseString(testData)
+print "data:", data
+print "data.asList():",
+pprint.pprint(data.asList())
+print "data keys:", data.keys()
+print "data['min']:", data['min']
+print "data.max:", data.max
+Notes:
+
+Note the use of Dict to create a dictionary. The print statements show how to
+get at the items in the dictionary.  Note how we can also get the parse results
+as a list by using method asList.  Again, we use suppress to remove unneeded
+items from the parse results.
