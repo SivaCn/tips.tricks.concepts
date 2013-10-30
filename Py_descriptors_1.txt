@@ -1,0 +1,604 @@
+Python Descriptors Demystified
+
+Python includes many built-in language features to enable concise,
+easily-understood code. Some of these niceties include list/set/dictionary
+comprehensions, properties, and decorators. For the most part, these
+"intermediate-level" language features are well-documented, and easy to learn.
+There is one notable exception to this: descriptors. For me at least,
+descriptors were the feature of the core Python language that remained
+mysterious for the longest time. There are a few reasons for this: The official
+documentation on descriptors is rather esoteric, and doesn't include good use
+cases for why you might write descriptors (My apologies to Raymond Hettinger,
+                                           whose other Python articles and
+                                           videos I have found very helpful).
+The syntax for writing descriptors is a little weird.  Custom descriptors might
+be the least-utilized feature of the Python language, so it's hard to find good
+examples in open source projects.  Nevertheless, descriptors do have their use
+once you figure them out. This document tries to build the argument for what
+descriptors do, and why you should care.  The punchline: descriptors are
+reusable properties
+
+Here's what we're building up to: fundamentally, descriptors are properties
+that you can reuse. That is, descriptors let you write code that looks like
+this
+
+f = Foo()
+b = f.bar
+f.bar = c
+del f.bar
+
+and, behind the scenes, calls custom methods when trying to access (b = f.bar),
+assign to (f.bar = c), or delete an instance variable (del f.bar) Let's
+establish why being able to disguise function calls as attribute access is a
+good thing.  Properties disguise function calls as attributes
+
+Imagine you are writing some code to organize information about movies (spoiler
+alert: these projects beat you to it).
+
+You might end up with a movie class that looks like this:
+
+class Movie(object):
+    def __init__(self, title, rating, runtime, budget, gross):
+        self.title = title
+        self.rating = rating
+        self.runtime = runtime
+        self.budget = budget
+        self.gross = gross
+
+    def profit(self):
+        return self.gross - self.budget
+
+You start using this class in other parts of your project, but then you realize
+something: by mistake, you sometimes assign negative budgets to movies. You
+decide this is bad, and want the Movie class to forbid this. The first thing
+you think to try is this:
+
+class Movie(object):
+    def __init__(self, title, rating, runtime, budget, gross):
+        self.title = title
+        self.rating = rating
+        self.runtime = runtime
+        self.gross = gross
+        if budget < 0:
+            raise ValueError("Negative value not allowed: %s" % budget)
+        self.budget = budget
+
+    def profit(self):
+        return self.gross - self.budget
+
+But that won't work, because other parts of your code assign values to
+Movie.budget directly -- this new class catches data entry errors within the
+__init__ method, but not the cases where somebody tries to run m.budget = -100
+on a pre-existing instance. What's a cinephile pythonista to do?  Luckily,
+Python properties solve this problem. If you've never seen properties before,
+here's how they work:
+
+class Movie(object):
+    def __init__(self, title, rating, runtime, budget, gross):
+        self._budget = None
+
+        self.title = title
+        self.rating = rating
+        self.runtime = runtime
+        self.gross = gross
+        self.budget = budget
+
+    @property
+    def budget(self):
+        return self._budget
+
+    @budget.setter
+    def budget(self, value):
+        if value < 0:
+            raise ValueError("Negative value not allowed: %s" % value)
+        self._budget = value
+
+    def profit(self):
+        return self.gross - self.budget
+
+
+m = Movie('Casablanca', 97, 102, 964000, 1300000)
+print m.budget       # calls m.budget(), returns result
+try:
+    m.budget = -100  # calls budget.setter(-100), and raises ValueError
+except ValueError:
+    print "Woops. Not allowed"
+964000
+Woops. Not allowed
+
+We specify a getter method with a @property decorator, and a setter method with
+a @budget.setter decorator. When we do that, Python automatically calls the
+getter whenever anybody tries to access the budget. Likewise Python
+automatically calls budget.setter whenever it encounters code like m.budget =
+value.  Take a moment to appreciate how nice it is that Python does this: if
+properties didn't exist, we'd have to hide all of our instance attributes, and
+provide lots of explicit methods like get_budget and set_budget. Code that uses
+our classes would constantly be calling these getter/setter methods, and would
+start to look like crufty Java code. Even worse, if we ignored this coding
+style and just gave direct access to an instance attribute like budget, there
+would be no clean way to later add the non-negativity check -- we would have to
+retroactively create the set_budget method, and search our entire project to
+change lines like m.budget = value to m.set_budget(value). Gross.  So
+properties let you attach custom code to variable getting/setting, while
+maintaining a simple attribute-like interface for your classes. Nice.
+Properties Get Tedious
+
+The main downside to properties is that they aren't reusable. For example,
+let's assume you want to add the non-negativity check to the rating, runtime,
+and gross fields as well. Here's the new class
+
+class Movie(object):
+    def __init__(self, title, rating, runtime, budget, gross):
+        self._rating = None
+        self._runtime = None
+        self._budget = None
+        self._gross = None
+
+        self.title = title
+        self.rating = rating
+        self.runtime = runtime
+        self.gross = gross
+        self.budget = budget
+
+    #nice
+    @property
+    def budget(self):
+        return self._budget
+
+    @budget.setter
+    def budget(self, value):
+        if value < 0:
+            raise ValueError("Negative value not allowed: %s" % value)
+        self._budget = value
+
+    #ok
+    @property
+    def rating(self):
+        return self._rating
+
+    @rating.setter
+    def rating(self, value):
+        if value < 0:
+            raise ValueError("Negative value not allowed: %s" % value)
+        self._rating = value
+
+    #uhh...
+    @property
+    def runtime(self):
+        return self._runtime
+
+    @runtime.setter
+    def runtime(self, value):
+        if value < 0:
+            raise ValueError("Negative value not allowed: %s" % value)
+        self._runtime = value
+
+    #is this forever?
+    @property
+    def gross(self):
+        return self._gross
+
+    @gross.setter
+    def gross(self, value):
+        if value < 0:
+            raise ValueError("Negative value not allowed: %s" % value)
+        self._gross = value
+
+    def profit(self):
+        return self.gross - self.budget
+
+That's a lot of code, and a lot of duplicated logic. While properties make the
+outsides of classes look nice, they don't make the insides of classes look
+nice.  Descriptors (Finally)
+
+This is the problem that descriptors solve. Descriptors generalize properties,
+and let you write separate classes for reusable property logic. Here's an
+example of how they work (for the moment, don't worry about what's inside
+                          NonNegative):
+
+from weakref import WeakKeyDictionary
+
+class NonNegative(object):
+    """A descriptor that forbids negative values"""
+    def __init__(self, default):
+        self.default = default
+        self.data = WeakKeyDictionary()
+
+    def __get__(self, instance, owner):
+        # we get here when someone calls x.d, and d is a NonNegative instance
+        # instance = x
+        # owner = type(x)
+        return self.data.get(instance, self.default)
+
+    def __set__(self, instance, value):
+        # we get here when someone calls x.d = val, and d is a NonNegative instance
+        # instance = x
+        # value = val
+        if value < 0:
+            raise ValueError("Negative value not allowed: %s" % value)
+        self.data[instance] = value
+
+
+class Movie(object):
+
+    #always put descriptors at the class-level
+    rating = NonNegative(0)
+    runtime = NonNegative(0)
+    budget = NonNegative(0)
+    gross = NonNegative(0)
+
+    def __init__(self, title, rating, runtime, budget, gross):
+        self.title = title
+        self.rating = rating
+        self.runtime = runtime
+        self.budget = budget
+        self.gross = gross
+
+    def profit(self):
+        return self.gross - self.budget
+
+
+m = Movie('Casablanca', 97, 102, 964000, 1300000)
+print m.budget  # calls Movie.budget.__get__(m, Movie)
+m.rating = 100  # calls Movie.budget.__set__(m, 100)
+try:
+    m.rating = -1   # calls Movie.budget.__set__(m, -100)
+except ValueError:
+    print "Woops, negative value"
+964000
+Woops, negative value
+
+There's some new syntax in here, so let's look at things piece by piece:
+NonNegative is a descriptor object. It's a descriptor because it defines
+the __get__, __set__, or __delete__ method.  The Movie class looks very
+clean. We create 4 descriptors at the class level, and treat them like
+normal (instance-level) attributes everywhere else. And apparently, the
+desciptors are checking for non-negative values for us.  Accessing a
+descriptor
+
+When Python sees the line print m.budget, it recognizes that budget is a
+descriptor with a __get__ method. Instead of passing m.budget to print
+directly, it calls Movie.budget.__get__, and feeds the result of that to print.
+This is similar to what happens when you access a property -- Python
+automatically calls a method, and returns the result.  __get__ receives two
+arguments: the instance object to the left of the period (that is, the m object
+                                                          in m.budget), and the
+type of that instance (Movie). In some Python documentation, Movie is called
+the owner of the descriptor. If we had asked for Movie.budget, Python whould
+have called Movie.budget.__get__(None, Movie); that is, the fist argument is
+either an instance of the owner, or None. These input arguments may seem weird
+to you, but they're there to give you information about what object the
+descriptor is part of. This will make sense once we look inside the NonNegative
+class.  Assigning to a descriptor
+
+When Python sees m.rating = 100, Python recognizes rating is a descriptor with
+a __set__ method, and it calls Movie.rating.__set__(m, 100). Like __get__, the
+first argument of __set__ is the instance to the left of the period (the m in
+m.rating = 100). The second argument is the value to the right of the equals
+sign (100).  Deleting a descriptor
+
+For the sake of completeness, if you call del m.budget, Python will call
+Movie.budget.__delete__(m).  How NonNegative works
+
+With this in mind, we can now look to see how the NonNegative class works. Each
+instance of NonNegative maintains a dictionary that maps owner instances to
+data values. When we call m.budget, the __get__ method looks up the data
+associated with m, and returns the result (or a default value, if no such value
+                                           exists). __set__ uses the same
+approach, but includes the extra non-negativity check. We use a
+WeakKeyDictionary instead of a normal dict to prevent a memory leak -- we don't
+want an instance to stay alive simply because it's in the descriptor
+dictionary, and otherwise unused.  Working with descriptors is slightly
+awkward. Because they live at the class level, every instance shares the same
+descriptor. This means that descriptors have to manually manage different
+states for different object instances, and need to explicitly be passed
+instances as the first argument of the __get__, __set__, and __delete__
+methods.  Hopefully, however, this example gives you an idea of what
+descriptors can be useful for -- they provide a way to organize property logic
+into isolated classes. If you find yourself repeating the same logic across
+several properties, that should be a clue to consider whether refactoring that
+code into a descriptor is worthwhile.  Recipes and Gotchas
+
+Put descriptors at the class level
+
+For descriptors to work properly, they must be defined at the class level. If
+you don't, Python doesn't automatically invoke the __get__ and __set__ methods
+for you:
+
+class Broken(object):
+    y = NonNegative(5)
+    def __init__(self):
+        self.x = NonNegative(0)  # NOT a good descriptor
+
+b = Broken()
+print "X is %s, Y is %s" % (b.x, b.y)
+X is <__main__.NonNegative object at 0x10432c250>, Y is 5
+
+As you can see, accessing the class-level descriptor y automatically calls
+__get__. However, accessing the instance-level descriptor x returns the
+descriptor itself, sans magic.  Make sure to keep instance-level data
+instance-specific
+
+You might be tempted to write the NonNegative descriptor like this
+
+class BrokenNonNegative(object):
+    def __init__(self, default):
+        self.value = default
+
+    def __get__(self, instance, owner):
+        return self.value
+
+    def __set__(self, instance, value):
+        if value < 0:
+            raise ValueError("Negative value not allowed: %s" % value)
+        self.value = value
+
+class Foo(object):
+    bar = BrokenNonNegative(5)
+
+f = Foo()
+try:
+    f.bar = -1
+except ValueError:
+    print "Caught the invalid assignment"
+Caught the invalid assignment
+
+That seems to work fine. The problem here is that all instances of Foo share
+the same bar instance, leading to this flavor of sadness:
+
+class Foo(object):
+    bar = BrokenNonNegative(5)
+
+f = Foo()
+g = Foo()
+
+print "f.bar is %s\ng.bar is %s" % (f.bar, g.bar)
+print "Setting f.bar to 10"
+f.bar = 10
+print "f.bar is %s\ng.bar is %s" % (f.bar, g.bar)  #ouch
+f.bar is 5
+g.bar is 5
+Setting f.bar to 10
+f.bar is 10
+g.bar is 10
+
+This is why we used the data dictionary in NonNegative. The first argument to
+__get__ and __set__ tell us which instance to consider. NonNegative uses this
+argument as a dictionary key, to keep data for each Foo instance separate.
+
+class Foo(object):
+    bar = NonNegative(5)
+
+f = Foo()
+g = Foo()
+print "f.bar is %s\ng.bar is %s" % (f.bar, g.bar)
+print "Setting f.bar to 10"
+f.bar = 10
+print "f.bar is %s\ng.bar is %s" % (f.bar, g.bar)  #better
+f.bar is 5
+g.bar is 5
+Setting f.bar to 10
+f.bar is 10
+g.bar is 5
+
+This is the most awkward aspect of descriptors (full disclosure: I don't
+actually understand why Python doesn't let you define descriptors at the instance
+level, and always dispatch to __get__ and __set__. There must be some reason
+why this doesn't work).  Beware unhashable descriptor owners
+
+NonNegative uses a dictionary to keep instance-specific data separate. This
+normally works fine, unless you want to use descriptors with unhashable objects : clas
+                                                s
+MoProblems(list):  #you can't use lists as dictionary keys x = NonNegative(5)
+
+m = MoProblems()
+print m.x  # womp womp
+---------------------------------------------------------------------------
+TypeError                                 Traceback (most recent call last)
+<ipython-input-8-dd73b177bd8d> in <module>()
+      3
+      4 m = MoProblems()
+----> 5 print m.x  # womp womp
+
+<ipython-input-3-6671804ce5d5> in __get__(self, instance, owner)
+      9         # instance = x
+     10         # owner = type(x)
+---> 11         return self.data.get(instance, self.default)
+     12
+     13     def __set__(self, instance, value):
+
+TypeError: unhashable type: 'MoProblems'
+
+Because instances of MoProblems (which is a subclass of list) aren't hashable,
+they can't be used as keys in the data dictionary for MoProblems.x. There are a few
+ways around this, though none are perfect. The best approach is probably to "label" your
+descriptors
+
+class Descriptor(object):
+
+    def __init__(self, label):
+        self.label = label
+
+    def __get__(self, instance, owner):
+        print '__get__', instance, owner
+        return instance.__dict__.get(self.label)
+
+    def __set__(self, instance, value):
+        print '__set__'
+        instance.__dict__[self.label] = value
+
+
+class Foo(list):
+    x = Descriptor('x')
+    y = Descriptor('y')
+
+f = Foo()
+f.x = 5
+print f.x
+__set__
+__get__ [] <class '__main__.Foo'>
+5
+
+This relies on a highly non-obvious detail of Python's method resolution order.
+We label each descriptor in Foo with the same name as the variable that we
+assign the descriptor to (for example, x = Descriptor('x')). The descriptor
+then stores instance-specific data in f.__dict__['x']. This dictionary entry
+would normally be what Python returns when we ask for f.x. However, because
+Foo.x is a descriptor, Python doesn't use f.__dict__['x'] normally, and the
+descriptor can safely store stuff there. Just make sure you don't label the
+descriptor anything else:
+
+class Foo(object):
+    x = Descriptor('y')
+
+f = Foo()
+f.x = 5
+print f.x
+
+f.y = 4    #oh no!
+print f.x
+__set__
+__get__ <__main__.Foo object at 0x10432c810> <class '__main__.Foo'>
+5
+__get__ <__main__.Foo object at 0x10432c810> <class '__main__.Foo'>
+4
+
+I don't love this pattern, since it's fragile and subtle, but it's fairly
+common. And it works for unhashable owner classes. David Beazley uses it in his
+books Labeled Descriptors with Metaclasses
+
+Because descriptor labels match the variable name they are assigned to, some
+people use metaclasses to take care of this bookkeeping automatically:
+
+class Descriptor(object):
+    def __init__(self):
+        #notice we aren't setting the label here
+        self.label = None
+
+    def __get__(self, instance, owner):
+        print '__get__. Label = %s' % self.label
+        return instance.__dict__.get(self.label, None)
+
+    def __set__(self, instance, value):
+        print '__set__'
+        instance.__dict__[self.label] = value
+
+
+class DescriptorOwner(type):
+    def __new__(cls, name, bases, attrs):
+        # find all descriptors, auto-set their labels
+        for n, v in attrs.items():
+            if isinstance(v, Descriptor):
+                v.label = n
+        return super(DescriptorOwner, cls).__new__(cls, name, bases, attrs)
+
+
+class Foo(object):
+    __metaclass__ = DescriptorOwner
+    x = Descriptor()
+
+f = Foo()
+f.x = 10
+print f.x
+
+__set__
+__get__. Label = x
+10
+
+I won't explain the details of metaclasses -- David Beazley's tutorial at the
+bottom of this article covers them. The main point is that the metaclass
+auto-assigns descriptor labels, to match the variable name that each descriptor
+is assigned to.  While this solves the problem of mismatched descriptor labels
+and variable names, it does so by adding all the complexity of metaclasses. You
+can decide if this is worth the hassle, but I have my doubts.  Accessing
+Descriptor Methods
+
+Descriptors are just classes, and you may want to add other methods to them.
+For example, descriptors are a great way to implement callback properties. Say
+we want a class to notify us whenever part of its state changes. Here's most of
+the code to do that
+
+class CallbackProperty(object):
+    """A property that will alert observers when upon updates"""
+    def __init__(self, default=None):
+        self.data = WeakKeyDictionary()
+        self.default = default
+        self.callbacks = WeakKeyDictionary()
+
+    def __get__(self, instance, owner):
+        return self.data.get(instance, self.default)
+
+    def __set__(self, instance, value):
+        for callback in self.callbacks.get(instance, []):
+            # alert callback function of new value
+            callback(value)
+        self.data[instance] = value
+
+    def add_callback(self, instance, callback):
+        """Add a new function to call everytime the descriptor updates"""
+        #but how do we get here?!?!
+        if instance not in self.callbacks:
+            self.callbacks[instance] = []
+        self.callbacks[instance].append(callback)
+
+class BankAccount(object):
+    balance = CallbackProperty(0)
+
+def low_balance_warning(value):
+    if value < 100:
+        print "You are poor"
+
+ba = BankAccount()
+
+# will not work -- try it
+#ba.balance.add_callback(ba, low_balance_warning) This is a promising pattern
+-- we can attach custom callback functions to respond to state changes within a
+class, without having to modify the class code at all. That's a lovely
+separation of concerns. All we need to do now is call
+ba.balance.add_callback(ba, low_balance_warning), so that low_balance_warning
+is called whenever balance changes.  But how do we do that? Descriptors always
+call __get__ when we try to access them. It would seem that the add_callback
+method is unreachable! The trick is to take advantage of the special case that,
+when accessed from the class level, the first argument to __get__ is None:
+
+class CallbackProperty(object):
+    """A property that will alert observers when upon updates"""
+    def __init__(self, default=None):
+        self.data = WeakKeyDictionary()
+        self.default = default
+        self.callbacks = WeakKeyDictionary()
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+        return self.data.get(instance, self.default)
+
+    def __set__(self, instance, value):
+        for callback in self.callbacks.get(instance, []):
+            # alert callback function of new value
+            callback(value)
+        self.data[instance] = value
+
+    def add_callback(self, instance, callback):
+        """Add a new function to call everytime the descriptor within instance updates"""
+        if instance not in self.callbacks:
+            self.callbacks[instance] = []
+        self.callbacks[instance].append(callback)
+
+class BankAccount(object):
+    balance = CallbackProperty(0)
+
+def low_balance_warning(value):
+    if value < 100:
+        print "You are now poor"
+
+ba = BankAccount()
+BankAccount.balance.add_callback(ba, low_balance_warning)
+
+ba.balance = 5000
+print "Balance is %s" % ba.balance
+ba.balance = 99
+print "Balance is %s" % ba.balance
+Balance is 5000
+You are now poor
+Balance is 99
