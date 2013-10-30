@@ -1,0 +1,126 @@
+A "New Class" is the recommended way to create a class in modern Python.
+
+A "Classic Class" or "old-style class" is a class as it existed in Python 2.1
+and before. They have been retained for backwards compatibility. This page
+attempts to list the differences.
+
+The syntax for the two types looks the same; "new-style", "old style",
+"classic", and variants are just descriptions that various people have used;
+Python hasn't yet settled on a specific official choice for the terminology.
+
+The minor syntactic difference is that New Style Classes happen to inherit from
+object.
+
+
+class Old1:
+    ...
+
+class Old2(Old1, UserDict): # Assuming UserDict is still old-style
+    ...
+vs
+
+class New1(object):
+    ...
+class New2(New1):
+    ...
+class New3(Old1, New2):
+    ...
+class New4(dict, Old1):
+    # dict is a newstyle class ...
+
+
+New Style classes can use descriptors (including __slots__), and Old Style
+classes cannot. Normally, this is just an advantage for New Style Classes, but
+it can affect lookup. An old-style class will always find an attribute on an
+instance before it looks in the hierarchy. (So you can hide a method.) A
+new-style class will let the class definition win if it is a writeable
+descriptor, so you may not be able to (effectively) store data on an instance.
+More information on slots and descriptors.  Warning: In 2.5, magic names
+(typically those with a double underscore (DunderAlias) at both ends of the
+ name) may look at the class rather than the instance even for old-style
+classes. I say this based on some python-dev discussion; I didn't notice how
+solidly the final decision was made. Later discussion extended it to "next"
+(despite the lack of underscore) and Guido said not to count on it in either
+direction. Since magic names are supposed be generally reserved anyhow, normal
+code should not care.
+
+Magic names (which ones even exist) have changed a little. Old classes don't
+have an __mro__, new classes (generally) don't have __members__ or __methods__.
+New classes generally won't let you change the class's __bases__ or __name__
+(though you can still call it whatever you want in your namespace) and are
+pickier about changing an object's __class__. See
+http://www.python.org/2.2.2/bugs.html for a list of expected
+converting-an-old-class-to-a-new-class problems.  When numeric operations
+(including "*", or "%") are applied to objects of different types, there is a
+fairly complex chain of logic to decide what should eventually happen. For
+old-style classes, there is often an attempt to Coerce the objects to the same
+type; for new style classes, there is no automatic call to __coerce__. (Really
+just an important example of the magic names change.)
+An Exception cannot be a New-Style class. This is a wart that will probably be
+removed in 2.5. (As of 2.5a1, Exception is New Style.) Previously it was
+required because of some complex backward compatibility dances involving
+(deprecated) string exceptions and whether a raised object should be treated as
+a Class or as an Instance of a Class. Note that you can inherit from both
+Exception and object; you just can't raise the result.
+
+>>> class NewException(Exception, object):
+        pass
+
+>>> raise NewException
+
+Traceback (most recent call last):
+  File "<pyshell#22>", line 1, in -toplevel-
+    raise NewException
+TypeError: exceptions must be classes, instances, or strings (deprecated), not type
+
+>>> raise NewException()
+
+Traceback (most recent call last):
+  File "<pyshell#23>", line 1, in -toplevel-
+    raise NewException()
+TypeError: exceptions must be classes, instances, or strings (deprecated), not NewException
+
+MRO; Method Resolution Order Old Style classes search each base class,
+including the bases of the bases, Left To Right. New Style classes search each
+base class only once, and the order may slightly different than you would get
+with an ambiguous Old Style class.
+
+
+>>> class Old: pass
+>>> class O1(Old): pass
+>>> class O2(Old): pass
+>>> class OD(O1, O2): pass
+
+>>> OD.__mro__
+Traceback (most recent call last):
+  File "<pyshell#24>", line 1, in -toplevel-
+    O.__mro__
+AttributeError: class O has no attribute '__mro__'
+
+OK, but write some methods to figure it out... and the effective MRO is
+
+OD, O1, Old, O2, Old
+
+So that Old is searched before its own derived class O2, then (uselessly)
+searched again at the end.
+
+
+>>> class New(object): pass
+>>> class N1(New): pass
+>>> class N2(New): pass
+>>> class ND(N1, N2): pass
+>>> ND.__mro__
+(<class '__main__.ND'>, <class '__main__.N1'>, <class '__main__.N2'>,
+ <class '__main__.New'>, <type 'object'>)
+
+So New (and its own base, object) is only searched once -- after *all* of its
+own subclasses have already been searched.
+
+Generally, the New MRO is better, but they aren't the same, and it can be
+painful to inherit from both types of class in the same derived class.
+
+One time when the older method did work better was mixin classes -- if you
+assume that methods will always be completely overridden (not just extended),
+then the old conventions are simpler and cleaner. If you need to combine
+methods, the old conventions (to explicitly call Base.method(self, args))
+required a fragile knowledge of the inheritance hierarchy.
