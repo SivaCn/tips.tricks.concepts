@@ -1,0 +1,279 @@
+What is a command line argument?
+================================
+
+When you invoke an application from a command line, it is often useful to be
+able to send one or more pieces of information from the command line to the
+application. As a simple example, we might want to start a text editor and also
+tell it the name of a file that it should open, like this
+
+          superedit a_filename.txt
+
+In this example, “superedit” is the name of the application, and
+“a_filename.txt” is a command line argument: in this case, the name of a file.
+
+It is possible to supply more than one command line argument
+
+We often want to send an application multiple arguments, like this:
+
+          rename file_a.txt  file_b.txt
+
+Positional arguments, named arguments, and flags
+
+There are three types of command line argument: positional arguments, named
+arguments, and flags.
+
+A positional argument is a bare value, and its position in a list of arguments
+identifies it.  A named argument is a (key, value) pair, where the key
+identifies the value.  A flag is a stand-alone key, whose presence or absence
+provides information to the application.  If we supplied the “rename”
+application with two positional arguments, like this
+
+          rename file_a.txt  file_b.txt
+
+then the position of the arguments identifies the value.
+
+The value in position 1 (“file_a.txt”) is the current name of the file.  The
+value in position 2 (“file_b.txt”) is the requested new name of the file.  We
+could have written the “rename” application so that it requires two named
+arguments, like this
+
+          rename  -oldname file_a.txt  -newname file_b.txt
+
+A flag is an argument whose presence alone is enough to convey information to
+the application. A good example is the frequently-used “-v” or "--verbose"
+argument.
+
+Although it is possible to think of flags as degenerate named arguments (named
+arguments that have a key but no value),
+I find it easier to think of flags as a distinct type of argument, different
+from named arguments.
+
+Keyword arguments and options
+
+I will use the term keyword argument to cover both named arguments and flags.
+
+David Goodger notes (in the first comment on the first version of this post)
+that I am not using the traditional Unix command-line lexicon.  What I have
+called keyword arguments are — on Unix platforms — traditionally called
+options;  what I have called values are traditionally called option arguments;
+and what I have called positional arguments, the Open Group calls operands.  So
+I should probably say something about my choice of technical terminology.
+
+For the purposes of this analysis, I prefer not to use the traditional Unix
+vocabulary of options, for a number of reason.  First of all, the term option
+tends to be Unix-specific; on Windows the term parameter is more frequently
+used.  Second, the investigation began with command-line parsers, and in the
+context of a discussion of parsers and parsing, keyword argument seems a more
+traditional and appropriate term than option.  Third, the usual definition of
+option is not very useful.
+
+Arguments are options if they begin with a hyphen.  And finally, the term
+option implies optionality.  Whether an argument is optional or required is a
+semantic issue rather than a syntactical issue.  At this point I’m interested
+in syntactical issues, so I want to use a semantically neutral vocabulary.  We
+can talk about options and optionality later, when we look at semantic
+concepts.
+
+Keyword arguments require a sigil
+
+When keyword arguments are used, there must be some mechanism for
+distinguishing a key from a value or from a positional argument. That mechanism
+is a “sigil”: a special character or string of characters that indicates the
+beginning of a key. In our example, the sigil was a dash (a hyphen).
+
+On Windows, the sigil is typically a forward slash: “/”.
+
+On Unix-like operating systems, the sigil is typically a dash "-".
+
+Some applications use multiple sigils.  With the plus sign “+” as a sigil, for
+instance, it is possible to use flags to turn options on and off.
+
+          attrib   -readonly    -archive     file_A.txt
+          attrib   +readonly    +archive     file_A.txt
+
+Single-character and multi-character keys
+
+Some applications, especially on Unix, make a distinction between
+single-character keys and multi-character keys (“long options”), with a
+single-dash sigil "-" indicating the beginning of a single-character key, and a
+double dash "--" sigil indicating the beginning of a multi-character key.
+Often, an application will support both single-character and multi-character
+keys for the same argument. For example, the “rename” application might accept
+both this
+
+          rename  -o file_a.txt  -n file_b.txt
+
+and this
+
+          rename  --oldname file_a.txt  --newname file_b.txt
+
+Fixed-length and variable-length keys
+
+The previous section describes what I think most Unix programmers would say is
+the difference between single-dash and double-dash keys. But I think it is
+actually wrong.
+
+The real difference between a single-dash sigil "-" and a double dash "--"
+sigil is not the difference between one and many, but the difference between
+fixed-length and variable-length keys. (This is obscured by the fact that a
+                                        single-character key is also
+                                        automatically a fixed-length key.)
+
+The thing that really makes keys that begin with a single dash different from
+keys that begin with a double dash is not that they are one character long, but
+that their length is fixed and known. For example, flag concatenation (see
+                                                                       below)
+is possible because the flag keys have a known and fixed length. It doesn’t
+depend on the flag keys being one character long — it would work just as well
+if the length for flag keys was fixed at two or even three characters. And this
+is also true of the third technique for distinguishing keys from argument
+values (see the next section).
+
+Named arguments require a mechanism to distinguish keys from argument values
+
+One technique is to use whitespace to separate argument values from keys. We
+saw this in our earlier example
+
+          rename  -o file_a.txt  -n file_b.txt
+
+A second technique is to use a special (non-whitespace) character to separate
+argument values from keys. This special character could be any character that
+cannot occur in either the key or argument value.
+
+On Unix, this is traditionally an equal sign “=”, like this.
+
+          rename  -o=file_a.txt  -n=file_b.txt
+
+On Windows and MS-DOS this is traditionally a colon “:”, like this.
+
+          rename  /o:file_a.txt  /n:file_b.txt
+
+An application might permit whitespace before and after the equal sign, like
+this.
+
+          rename  -o = file_a.txt  -n = file_b.txt
+
+A third technique is to use the known length of the key to distinguish the key
+from the argument value. Suppose the “rename” application uses only 1-character
+keys. Then it might accept arguments like this.
+
+          rename  -ofile_a.txt  -nfile_b.txt
+
+Fixed-length keys make flag concatenation possible
+
+Suppose that an application follows the convention that a single-dash sigil
+signals the start of a single-character flag argument. Then it can accept
+either this
+
+          tar -x -v -f  some_filename.tar
+
+or this, where several flag arguments are specified together
+
+          tar -xvf some_filename.tar
+
+Here is where the distinction between the single-dash sigil and the double-dash
+sigil becomes important.
+
+"-xvf" indicates the concatenation of three single-character flags: “x”, “v”,
+and “f”.  "--xvf" (note the double dash) indicates a single multi-character
+flag: “xvf”.  Parsing the command line
+
+In many of the examples that we’ve seen, parsing the command line is as simple
+as splitting it on whitespace. But the situation gets more complicated if
+values can contain whitespace. If that is true, then we need to support
+delimiters that can enclose values that contain whitespace.
+
+Suppose we want to invoke a word-processor from the command line. And we want
+to specify two arguments on the command line: the name of the file, and the
+name of the author. This obviously will not work.
+
+          superedit A Christmas Story.doc  Clement Moore
+
+What we need is this.
+
+          superedit "A Christmas Story.doc"  "Clement Moore"
+
+Support of quoted values means that command-line parsers must be more
+sophisticated… just splitting the command line on whitespace won’t do the job.
+The command-line parser must recognize and correctly handle quote characters…
+and escaped quote characters inside of quoted strings.
+
+The most common delimiter for argument values is the double-quote symbol. But
+we might also (or instead) want to support single quotes, back ticks,
+parentheses, or square/wavy/pointy brackets. We can imagine a case in which a
+malevolent programmer wrote superedit to expect positional arguments like this.
+
+          superedit (A Christmas Story.doc)  (Clement Moore)
+
+… or named arguments like this.
+
+          superedit filename(A Christmas Story.doc)  author(Clement Moore)
+
+Sigils in positional arguments
+
+Remember our “rename” application? It accepted arguments like this, where the
+dash is the sigil that introduces the key of a named argument.
+
+          rename  -o file_a.txt  -n file_b.txt
+
+But filenames can begin with dashes. We might need to write a command like
+this, which would cause problems.
+
+          rename  -o -file_a.txt  -n -file_b.txt
+
+So this is another reason why we might need to be able to quote argument
+values: to “hide” a sigil character inside a value.
+
+          rename  -o "-file_a.txt"  -n "-file_b.txt"
+
+The order of arguments
+
+In the first version of this post, I wrote that:
+
+
+It is a universally observed convention that keyword arguments (named arguments
+                                                                and flags) are
+grouped together positional arguments are grouped together keyword arguments
+must be specified first, before specifying positional arguments
+
+But that is wrong. It is a widely — but not universally — observed convention.
+As Eric wrote, in a comment on the first version of this post, many modern
+programs allow keyword arguments to be specified after (or even between)
+positional arguments And even very old programs do it too. The command-line
+syntax for Microsoft DOS’s dir command (roughly equivalent to Unix’s ls
+                                          command) is basically
+
+dir [filename] [switches]
+
+with the filename positional argument appearing before the switches.
+
+A separator between keyword arguments and positional arguments
+
+Suppose we have an application “myprog” that accepts one or more keyword
+arguments that start with a dash sigil, followed by one or more positional
+arguments that supply filenames. And suppose that filenames can contain — and
+begin with — dashes.
+
+We’re going to have a problem if we code this
+
+          myprog -v -r -t -file_a.txt -file_b.txt  -file_c.txt
+
+myprog is going to see “-file_a.txt” and (since it starts with a dash, the
+sigil) myprog will try to handle it like a keyword argument. Not good.
+
+We could deal with this problem by routinely enclosing all filename positional
+arguments in quotes, but that would be clumsy and laborious.
+
+          myprog -v -r -t "-file_a.txt" "-file_b.txt"  "-file_c.txt"
+
+An alternative is to use a special string (typically double dashes "--") to
+indicate the beginning of positional arguments.
+
+          myprog -v -r -t   --  -file_a.txt -file_b.txt  -file_c.txt
+
+So now we have four basic kinds of arguments.
+
+    positional arguments
+    named arguments (key+value pairs)
+    flags
+    an indicator of the beginning of positional arguments ("--")
