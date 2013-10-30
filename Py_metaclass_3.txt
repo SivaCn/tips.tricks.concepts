@@ -1,0 +1,48 @@
+Metaclasses are the secret sauce that make 'class' work. The default metaclass
+for a new style object is called 'type'.
+
+class type(object)
+  |  type(object) -> the object's type
+  |  type(name, bases, dict) -> a new type
+
+Metaclasses take 3 args. 'name', 'bases' and 'dict'
+
+Here is where the secret starts. Look for where name, bases and the dict come
+from in this example class definition.
+
+class ThisIsTheName(Bases, Are, Here):
+    All_the_code_here
+    def doesIs(create, a):
+        dict
+Lets define a metaclass that will demonstrate how 'class:' calls it.
+
+def test_metaclass(name, bases, dict):
+    print 'The Class Name is', name
+    print 'The Class Bases are', bases
+    print 'The dict has', len(dict), 'elems, the keys are', dict.keys()
+
+    return "yellow"
+
+class TestName(object, None, int, 1):
+    __metaclass__ = test_metaclass
+    foo = 1
+    def baz(self, arr):
+        pass
+
+print 'TestName = ', repr(TestName)
+
+# output =>
+The Class Name is TestName
+The Class Bases are (<type 'object'>, None, <type 'int'>, 1)
+The dict has 4 elems, the keys are ['baz', '__module__', 'foo', '__metaclass__']
+TestName =  'yellow'
+
+And now, an example that actually means something, this will automatically make
+the variables in the list "attributes" set on the class, and set to None.
+
+def init_attributes(name, bases, dict):
+    if 'attributes' in dict:
+        for attr in dict['attributes']:
+            dict[attr] = None
+
+    return type(name, bases, dict)
