@@ -1,0 +1,137 @@
+Advanced Python Training Objectives
+
+    Process text using regular expressions
+    Leverage OS services
+    Perform basic graphics programming
+    Create modules
+    Test and debug applications
+    Take advantage of Python's object-oriented features
+    Interact with network services such as FTP and SMTP
+    Query databases
+    Process XML data
+    Work with JSON
+    Use the sh module
+
+Advanced Python Training Outline
+
+    Python refresher
+        Data types
+        Sequences
+        Mapping types
+        Program structure
+        Files and console I/O
+        Conditionals
+        Loops
+        Builtins
+    OS Services
+        The os module
+        Environment variables
+        Launching external commands
+        Walking directory trees
+        Paths, directories, and filenames
+        Working with file systems
+        Dates and times
+    Pythonic Programming
+        The Zen of Python
+        Common idioms
+        Lambda functions
+        List comprehensions
+        Generator expressions
+        String formatting
+    Modules and packages
+        Initialization code
+        Namespaces
+        Executing modules as scripts
+        Documentation
+        Packages and name resolution
+        Naming conventions
+        Using imports
+    Classes
+        Defining classes
+        Instance methods and data
+        Initializers
+        Class methods
+        Static methods
+        Inheritance
+        Multiple inheritance
+        Pseudo-private variable
+    Metaprogramming
+        Implicit properties
+        globals() and locals()
+        Attributes
+        The inspect module
+        Decorators
+        Monkey patching
+    Programmer tools
+        Analyzing programs
+        Using pylint
+        Testing code
+        Using unittest
+        Debugging
+        Profiling
+    Distributing modules
+        Distribution concepts
+        setuptools
+        creating setup.py
+        building installers
+        running installers
+    Database access
+        The DB API
+        Available Interfaces
+        Connecting to a server
+        Creating and executing a cursor
+        Fetching data
+        Parameterized statements
+        Metadata
+        Transaction control
+    GUI Programming
+        Overview
+        The mainwindow object
+        Widgets
+        Colors and fonts
+        GUI layout
+        Event handling
+    Network Programming
+        Sockets
+        Clients
+        Servers
+        Application protocols
+        Forking servers
+        Threaded servers
+        Binary data
+        The struct module
+    Threads
+        Why use threads?
+        Threads are different
+        Variables are shared
+        Python threads modules
+        The threading module
+        The queue module
+        The python thread manager
+        Debugging threaded programs
+    XML and JSON
+        Working with XML
+        DOM and Sax
+        Introducing ElementTree
+        Parsing XML
+        Navigating the document
+        Creating a new XML document
+        JSON
+        Parsing JSON into Python
+        Converting Python into JSON
+    Extending Python
+        About non-Python modules
+        Overview of a C extension
+        Creating functions
+        Registering functions
+        Initialization code
+        Loading the module
+    Using the sh module
+        The sh namespace
+        Running a simple command
+        Keyword arguments
+        Running commands in the background
+        Piping and redirection
+        Working with STDIN
+        Exit codes
+        Advanced features
