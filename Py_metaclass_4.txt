@@ -1,0 +1,127 @@
+Metaclasses:
+
+Metaclasses are classes whose instances are other classes. Python 3 has
+retained the built-in metaclass type, used to create other metaclasses or
+dynamically create classes at run time. It is still valid to use the syntax:
+
+>>>aClass = type('className',
+                   (object,),
+                   {'magicMethod': lambda cls : print("blah blah")})
+
+which accepts as its arguments a string as the class name, a tuple of inherited
+objects (which can be an empty tuple), and a dictionary (which can also can be
+                                                         empty) containing
+methods that you can add. Of course, you can also inherit from type and create
+your own metaclass:
+
+
+class meta(type):
+    def __new__(cls, className, baseClasses, dictOfMethods):
+        return type.__new__(cls, className, baseClasses, dictOfMethods)
+
+Note: If the last two examples made no sense whatsoever, I highly recommend
+reading David Mertz and Michele Simionato's series on metaclasses. See
+Resources for a link.  Notice that now in a class definition, keyword arguments
+are allowed after the list of base classes—generally speaking, class
+Foo(*bases, **kwds): pass. The metaclass is passed in to the class definition,
+conveniently, using the keyword argument metaclass. For example:
+
+>>>class aClass(baseClass1, baseClass2, metaclass = aMetaClass): pass
+
+The old syntax for metaclasses is to assign the metaclass to the built-in
+attribute __metaclass__:
+
+class Test(object):
+    __metaclass__ = type
+
+Also, a new attribute—__prepare__—has been added. You use this attribute to
+create the dictionary for the new class namespace. It is called before the
+class body is evaluated, as Listing 3 shows.
+
+Keyword-only arguments: Python 3 has changed how function arguments are
+assigned to "parameter slots." You can use an asterisk (*) in the passed-in
+parameters so that you don't accept variable-length arguments. Named arguments
+must follow the bare *—for example, def meth(*, arg1): pass. See the Python
+documentation or PEP 3102 for more information (see Resources for links).
+
+>>>class aClass(baseClass1, baseClass2, metaclass = aMetaClass): pass
+
+The old syntax for metaclasses is to assign the metaclass to the built-in
+attribute __metaclass__:
+
+class Test(object):
+    __metaclass__ = type
+
+Also, a new attribute—__prepare__—has been added. You use this attribute to
+create the dictionary for the new class namespace. It is called before the
+class body is evaluated, as Listing 3 shows.
+
+Listing 3. A simple metaclass using the __prepare__ attribute
+
+def meth():
+    print("Calling method")
+
+class MyMeta(type):
+    @classmethod
+    def __prepare__(cls, name, baseClasses):
+        return {'meth':meth}
+
+    def __new__(cls, name, baseClasses, classdict):
+        return type.__new__(cls, name, baseClasses, classdict)
+
+class Test(metaclass = MyMeta):
+    def __init__(self):
+        pass
+
+    attr = 'an attribute'
+
+t = Test()
+print(t.attr)
+
+A more interesting example, taken verbatim from PEP 3115 and shown in Listing
+4, creates a metaclass with a list of names of its methods, while maintaining
+the order in which the class methods where declared.
+
+Listing 4. A metaclass that preserves the order of the class members
+
+# The custom dictionary
+class member_table(dict):
+    def __init__(self):
+        self.member_names = []
+
+    def __setitem__(self, key, value):
+        # if the key is not already defined, add to the
+        # list of keys.
+        if key not in self:
+            self.member_names.append(key)
+
+        # Call superclass
+        dict.__setitem__(self, key, value)
+
+# The metaclass
+class OrderedClass(type):
+    # The prepare function
+    @classmethod
+    def __prepare__(metacls, name, bases): # No keywords in this case
+        return member_table()
+
+    # The metaclass invocation
+    def __new__(cls, name, bases, classdict):
+        # Note that we replace the classdict with a regular
+        # dict before passing it to the superclass, so that we
+        # don't continue to record member names after the class
+        # has been created.
+        result = type.__new__(cls, name, bases, dict(classdict))
+        result.member_names = classdict.member_names
+        return result
+
+There are a few reasons for the changes in metaclasses. Objects store their
+methods in a dictionary, which has no order. However, there are several cases
+in which preserving the order of declared class members would be useful. You do
+this by the metaclass getting "involved" earlier in the class creation, when
+the information is still available—useful, for example, in the creation of C
+structs. This new mechanism also allows for other interesting possibilities to
+be implemented in the future, such as inserting symbols into the body of the
+created class namespace during class construction and forward references of
+symbols. PEP 3115 also mentions that there are aesthetic reasons for changing
+the syntax, but this is a debate that cannot be solved objectively.
