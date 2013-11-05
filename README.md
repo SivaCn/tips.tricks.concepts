@@ -1,4 +1,4 @@
-Tips_n_Tricks
-=============
+Tips_Tricks_and_Concepts
+========================
 
-Tips and Tricks
+Tips, Tricks and Concepts
