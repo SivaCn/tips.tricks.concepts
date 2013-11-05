@@ -1,0 +1,108 @@
+Abstract base classes
+
+As I mentioned in the previous article this series, ABCs are classes that can't
+be instantiated. Programmers coming from the Java or C++ languages should be
+familiar with this concept. Python 3 adds a new framework—abc—which provides
+support for working with ABCs.
+
+The abc module has a metaclass (ABCMeta) and decorators (@abstractmethod and
+@abstractproperty). If an ABC has an @abstractmethod or an @abstractproperty,
+it cannot be instantiated but must be overridden in a subclass. For example,
+the code:
+
+>>>from abc import *
+>>>class C(metaclass = ABCMeta): pass
+>>>c = C()
+is okay, but don't do this:
+>>>from abc import *
+>>>class C(metaclass = ABCMeta):
+...    @abstractmethod
+...    def absMethod(self):
+...        pass
+>>>c = C()
+Traceback (most recent call last):
+File "<stdin>", line 1, in <module>
+TypeError: Can't instantiate abstract class C with abstract methods absMethod
+
+Even better, use the code:
+>>>class B(C):
+...    def absMethod(self):
+...        print("Now a concrete method")
+>>>b = B()
+>>>b.absMethod()
+
+Now a concrete method
+
+The ABCMeta class overrides the attributes __instancecheck__ and
+__subclasscheck__, providing a way of overloading the built-in functions
+isinstance() and issubclass(). To add a virtual subclass to your ABC, use the
+register() method that ABCMeta provides. The simple example:
+
+>>>class TestABC(metaclass=ABCMeta): pass
+>>>TestABC.register(list)
+>>>TestABC.__instancecheck__([])
+True
+
+is equivalent to using isinstance(list, TestABC). You might have noticed that
+Python 3 uses __instancecheck__ instead of __issubclass__, and
+__subclasscheck__ instead of __issubclass__, which seems more natural. The
+reasoning is that the reversal of the arguments isinstance(subclass,
+                                                           superclass), for
+example, to superclass.__isinstance__(subclass) might cause confusion. So, the
+syntax superclass.__instancecheck__(subclass) wins.  Within the collections
+module, you can use several ABCs to test whether a class provides a specific
+interface:
+
+>>>from collections import Iterable
+>>>issubclass(list, Iterable)
+True
+
+
+The ABC type hierarchy
+
+Python 3 now supports a type hierarchy of ABCs that represent numeric classes.
+These ABCs live in the numbers module and include Number, Complex, Real,
+Rational, and Integral. Figure 1 shows the number hierarchy. You can, of
+course, use these to implement your own numeric type or other numeric ABC.
+
+
+Number Hierarchy:
+      NUMBER
+        ^
+        |
+
+     COMPLEX
+        ^
+        |
+
+       REAL
+        ^
+        |
+
+     RATIONEL
+        ^
+        |
+
+     INTEGRAL
+
+
+A new module, fractions, implements the numeric ABC Rational. This module gives
+support for rational number arithmetic. If you use dir(fractions.Fraction),
+you'll notice it has attributes such as imag, real, and __complex__. Following
+the numeric tower, this is because Rationals inherit from Reals, which inherit
+from Complex.
+
+The numerical tower: Python's numeric hierarchy was inspired by the Scheme
+language's numerical tower.
+
+
+Collections The collections framework consists of the container data types,
+double-ended queues (known as deques), and a default dictionary (known as a
+                                                                 defaultdict).
+A deque supports appending and popping from either front or back. The
+defaultdict container, a subclass of the built-in dictionary (according to the
+                                                              Python 3
+                                                              documentation)
+"overrides one method and adds one writable instance variable." Other than
+that, it acts like a dictionary. The collections framework also provides a data
+type factory function, namedtuple().
