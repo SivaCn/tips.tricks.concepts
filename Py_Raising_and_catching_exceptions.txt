@@ -1,0 +1,169 @@
+Raising and catching exceptions
+
+In Python 3, except clauses have been altered to deal with a syntactic
+ambiguity issue. Previously, in Python version 2.5, a try . . . except
+construction such as:
+
+>>>try:
+...    x = float('not a number')
+... except (ValueError, NameError):
+...    print "can't convert type"
+
+might incorrectly be written as:
+
+>>> try:
+...    x = float('not a number')
+... except ValueError, NameError:
+...    print "can't convert type"
+
+The problem with the latter form is that the ValueError exception will never be
+caught, because the interpreter will catch the ValueError and bind the
+exception object to the name NameError. This can be seen in the next example:
+
+>>> try:
+...    x = float('blah')
+... except ValueError, NameError:
+...    print "NameError is ", NameError
+...
+NameError is invalid literal for float(): not a number
+
+So, to deal with the ambiguities, the comma (,) is substituted with the keyword
+as when you want to bind the exception object to another name. If you want to
+catch multiple exceptions, parentheses (()) are required. The code in Listing 5
+shows two legitimate examples in Python 3.
+
+Listing 5. Exception handling in Python 3
+
+# bind ValueError object to local name ex
+try:
+    x = float('blah')
+except ValueError as ex:
+    print("value exception occurred ", ex)
+
+# catch two different exceptions
+# simultaneously
+try:
+     x = float('blah')
+except (ValueError, NameError):
+     print("caught both types of exceptions")
+
+Another change in exception handling is exception chaining—either implicit or
+explicit. Listing 6 shows an example of an implicit exception chain.
+
+Listing 6. An implicit exception chain in Python 3
+
+def divide(a, b):
+    try:
+        print(a/b)
+    except Exception as exc:
+        def log(exc):
+        fid = open('logfile.txt') # missing 'w'
+        print(exc, file=fid)
+        fid.close()
+
+        log(exc)
+
+divide(1,0)
+
+The divide() method tries to perform a division by zero and raises an
+exception: ZeroDivisionError. But, in the exception clause, inside the nested
+log() method, print(exc, file=fid) attempts to write to a file that hasn't been
+opened for writing. Python 3 raises the exceptions shown in Listing 7.
+
+Listing 7. The traceback of the implicit chained exception example
+
+Traceback (most recent call last):
+  File "chainExceptionExample1.py", line 3, in divide
+  print(a/b)
+ZeroDivisionError: int division or modulo by zero
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "chainExceptionExample1.py", line 12, in <module>
+    divide(1,0)
+  File "chainExceptionExample1.py", line 10, in divide
+    log(exc)
+  File "chainExceptionExample1.py", line 7, in log
+    print(exc, file=fid)
+  File "/opt/python3.0/lib/python3.0/io.py", line 1492, in write
+    self.buffer.write(b)
+  File "/opt/python3.0/lib/python3.0/io.py", line 696, in write
+    self._unsupported("write")
+  File "/opt/python3.0/lib/python3.0/io.py", line 322, in _unsupported
+    (self.__class__.__name__, name))
+io.UnsupportedOperation: BufferedReader.write() not supported
+
+Notice that both exceptions are handled. In previous versions of Python, the
+ZeroDivisionError would have been lost. How is this accomplished? A __context__
+attribute such as ZeroDivisionError is now a part of all exception objects. In
+this case, the __context__ attribute of the IOError that was raised "retains"
+the ZeroDivisionError in the __context__ attribute.  In addition to the
+__context__ attribute, exception objects have a __cause__ attribute, which is
+always initialized to None. The purpose of this attribute is to give an
+explicit way to record the cause of an exception. The __cause__ attribute is
+set with the following syntax:
+
+>>> raise EXCEPTION from CAUSE
+This is exactly the same as coding:
+>>>exception = EXCEPTION
+>>>exception.__cause__ = CAUSE
+>>>raise exception
+but much more elegant. The example in Listing 8 shows explicit exception chaining.
+
+Listing 8. Explicit exception chaining in Python 3
+
+
+class CustomError(Exception):
+    pass
+
+try:
+    fid = open("aFile.txt") # missing 'w' again
+    print("blah blah blah", file=fid)
+except IOError as exc:
+    raise CustomError('something went wrong') from exc
+
+As in the previous example, the print() function raises an exception, because
+the file was not open for writing. Listing 9 shows the traceback.
+
+Listing 9. The exception traceback
+
+Traceback (most recent call last):
+  File "chainExceptionExample2.py", line 5, in <module>
+    fid = open("aFile.txt")
+  File "/opt/python3.0/lib/python3.0/io.py", line 278, in __new__
+    return open(*args, **kwargs)
+  File "/opt/python3.0/lib/python3.0/io.py", line 222, in open
+    closefd)
+ File "/opt/python3.0/lib/python3.0/io.py", line 615, in __init__
+    _fileio._FileIO.__init__(self, name, mode, closefd)
+IOError: [Errno 2] No such file or directory: 'aFile.txt'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+File "chainExceptionExample2.py", line 8, in <modulei>
+  raise CustomError('something went wrong') from exc
+__main__.CustomError: something went wrong
+
+Notice in the traceback the line, "The above exception was the direct cause of
+the following exception," which is followed by another traceback that results
+in the CustomError, "something went wrong." Finally, yet another attribute
+added to exception objects is the __traceback__ attribute. If a caught
+exception doesn't have its __traceback__ attribute, then the new traceback is
+set. Here's a simple example:
+
+from traceback import format_tb
+
+try:
+    1/0
+except Exception as exc:
+    print(format_tb(exc.__traceback__)[0])
+
+Notice that format_tb returns a list and that there is only one exception in
+this list.
+
+The with statement
+
+As of Python version 2.6, with is now a keyword, and this feature no longer
+needs to be imported through __future__.
