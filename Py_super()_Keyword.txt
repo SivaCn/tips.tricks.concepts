@@ -1,0 +1,116 @@
+Understanding Python’s ‘super’
+
+When I started programming with Python (a switch I would urge any casual
+utility programmer to make), I learned basic syntax. I very very quickly
+learned that if you’re ever wondering if there’s the proverbial “better way” to
+do something, then there is probably already a utility built into Python to
+accomplish the task.
+
+Consider the ‘super’ functionality in Python: when I first encountered this, I
+had no idea what it was or what it meant. Furthermore, the documentation on it
+is very obscure and doesn’t seem to clarify anything about what it does. I
+Google’d it (of course) and instantly found results with titles like “Python’s
+Super Considered Harmful” and “Problems with the new super()“. Encouraging.
+
+It wasn’t until I began working in Django, a pure Python-based web framework
+(which I would highly recommend, if you’re in the web business:
+http://www.djangoproject.com/ ), when I was reading over others’ source code
+that I realized what you could do with super.
+
+If you have a class A,which defines some method called routine, like so:
+
+
+class A(object): # In Python 3, you can just do class A:
+    def routine(self):
+        print "A.routine()"
+
+And then a class B, which inherits from A, which also defines a routine method:
+
+
+class B(A):
+    def routine(self):
+        print "B.routine()"
+We instantiate with this:
+
+&gt;&gt;&gt; b = B()
+
+For simplicity, this example is stupidly simple. Now, if you instantiate B, and
+call it’s only method, you’ll only ever be running B‘s routine method, and no
+matter many times you call it it’ll never give you that of class A.
+
+Now consider if class B had the added a line to the end of it’s method:
+
+
+class B(A):
+    def routine(self):
+        print "B.routine()"
+        super(B, self).routine() # In Python 3, just do super().routine()
+
+In this case, ‘super’ will return the A object which is underneath B.  You give
+super() a handle to its own class, and then an actual instance of that same
+class.  Hence, we gave it “B”, and then “self”.  Super returns the literal
+parent of the active B object (which is the local variable ‘b’, because we
+passed it ‘self’).  It is not returning the simple generic class; instead, it
+is returning the actual A which was created when the local variable b was
+created.  This is called a “bound” class object, because it’s referring to an
+actual parent class object in memory, instead of just the class blueprint.
+
+This is what happens when we create a new B object now:
+
+&gt;&gt;&gt; b = B()
+&gt;&gt;&gt; b.routine()
+'B.routine()'
+'A.routine()'
+
+Simply put, this kind of usage of the super method is often used to “pass
+control up” to the parent class, after the subclass intercepts data.
+
+Finally, if you’re interested, here is a more practical example:
+
+from some.package import A
+# We don't need to know anything about the base class "A",
+# but we do want to intercept one of its parameters, "foo",
+# and change it, sending it along as before.
+# This new class could be used in place of "A" without
+# other sections of code even knowing the difference.
+class MyClass(A):
+    def render(self, foo, *args, **kwargs):
+        ''' this receives a var named 'foo', a tuple of
+        unnamed 'args',and a dictionary of named 'kwargs' '''
+        # Append a quick prefix to the variable 'foo'
+        foo = "intercepted by MyClass - " + foo
+        super(MyClass, self).render(foo, *args, **kwargs)
+
+In this example, we don’t need to know anything about class A, except for the
+fact that we want to alter the variable ‘foo’ when it comes into A‘s render
+method.  Note that ‘*args’ catches any unnamed arguments passed to MyClass, and
+that ‘**kwargs’ is the common abbreviation for ‘key-word arguments’.
+
+Also note that the only reason why MyClass‘s render method ALSO takes bunches
+of arguments is because we model it to look exactly like A‘s render method.  We
+want MyClass to seamlessly integrate with some other code.  That other code
+should never have a reason know the difference between A and MyClass.
+
+All this does is change ‘foo’, and then passes control back up to the parent
+class A, where the data was intended to go.  We cleanly call the super method,
+which returns A, with all of its unknown methods and fields.  We then call
+‘render‘ on that returned object, in order to execute A‘s own render method
+(and not our overloaded one in MyClass).
+
+By passing A its arguments with those prefixing * characters, we preserve how
+they were passed into myClass.  Keyword arguments get turned into a dictionary
+while in MyClass.render, but A.render wants them as keyword arguments still,
+not a dictionary.  So, we use the dereferencing * characters to turn it back
+into keyword arguments.
+
+Clean, huh?  This is extremely common in Django code, because Django gives you
+base classes to model from.  You then have the power to easily overload those
+model methods, do some custom task, and then pass control back up to the
+model’s method for the intended behavior.
+
+While super is nice, it only resolves into a single parent class, such that
+multiple inheritance (where multiple parent classes have the same method name)
+won’t know how to decide between which method to run.  Instead, you can
+directly invoke the parent class’s method in a more manual manner, such as
+“SecondParentClass.render(self, foo, *args, **kwargs)”.  Note that you pass a
+reference to ‘self’ in that method call, to properly put things into scope.
