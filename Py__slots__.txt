@@ -63,6 +63,7 @@ Traceback (most recent call last):
   File "<stdin>", line 1, in <module>
 AttributeError: 'myClass' object has no attribute 'new_attr'
 >>>
+
 Read only attributes?
 =====================
 
@@ -120,6 +121,7 @@ __slots__ the ‘__dict__’ value, and all these little side effects will go aw
 >>> instance.__slots__
 ('x', 'y', '__dict__')
 >>>
+
 But… what if I wanted to add the ‘__dict__’ value into __slots__ at runtime?
 
 Well…sorry dude but, no can do.
