@@ -1,6 +1,5 @@
 For every instance of any class, attributes are stored in a dictionary.
 
-
 >>> class myClass(object):
 ...     def __init__(self, *args, **kwargs):
 ...             self.x = 1
