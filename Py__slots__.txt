@@ -1,0 +1,142 @@
+For every instance of any class, attributes are stored in a dictionary.
+
+
+>>> class myClass(object):
+...     def __init__(self, *args, **kwargs):
+...             self.x = 1
+...             self.y = 2
+...
+>>> instance = myClass()
+>>> instance.__dict__
+{'y': 2, 'x': 1}
+>>>
+
+This means that for every instance you’ll have an instance of a dict. Now, for
+some people this might seem way too much space for just a couple of attributes.
+
+If you have lots and lots and looooots of instances, and you want to save some
+memory, you can use __slots__. The basic idea is that when you define the
+__slots__ class attribute, those attributes will get just the enough space,
+without wasting space.
+
+Here is the previous example using __slots__:
+
+
+>>> class myClass(object):
+...     __slots__ = ('x', 'y') #defining the slots.
+...     def __init__(self, *args, **kwargs):
+...             # initializing the values
+...             self.x = 1
+...             self.y = 2
+...
+>>> instance = myClass()
+>>> instance.__slots__
+('x', 'y')
+>>> instance.__dict__ # NO __DICT__ !!!!!
+
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+AttributeError: 'myClass' object has no attribute '__dict__'
+
+>>> instance.x
+1
+>>> instance.y
+2
+
+No __dict__ !
+=============
+
+Now, one side effect of these __slots__ thing is that, whenever you define the
+__slots__ class attribute, your __dict__ attribute for every instance will be
+gone!. It’s not a surprise because that’s why you should use __slots__ in the
+first place… to get rid off the __dict__ in every instance, to save some memory
+remember?
+
+Can’t bind attributes to the instance any more…
+===============================================
+Another side effect is that, as there is no __dict__, there is no way to add,
+at runtime, any attributes to your instance:
+
+
+# This should should work if there is no __slots__ defined...
+>>> instance.new_attr = 10
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+AttributeError: 'myClass' object has no attribute 'new_attr'
+>>>
+Read only attributes?
+=====================
+
+Another one is that, if there is some kind of collision between the slot and a
+class attribute, then the class attribute will overwrite the slot and, as there
+is no __dict__, the class attribute will be read-only.
+
+>>> class myClass(object):
+...     __slots__ = ('x', 'y')
+...     x = 10
+...     def __init__(self,*args, **kwargs):
+...             self.y = 2
+...
+>>> instance = myClass()
+>>> instance.x
+10
+>>> instance.x = 2
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+AttributeError: 'myClass' object attribute 'x' is read-only
+>>> instance.y
+2
+>>> instance.y = 3
+>>> instance.y
+3
+>>> instance_2 = myClass()
+>>> instance_2.x
+10
+>>> instance_2.y = 100
+>>> instance.y
+3
+>>> instance_2.y
+100
+>>>
+
+However if you want to have a __dict__, you can always insert into the
+__slots__ the ‘__dict__’ value, and all these little side effects will go away…
+
+<pre>>>> class myClass(object):
+...     __slots__ = ('x', 'y', '__dict__')
+...     x = 10
+...     def __init__(self, *args, **kwargs):
+...             self.y = 2
+...
+>>> instance = myClass()
+>>> instance.x
+10
+>>> instance.x = 100
+>>> instance.x
+100
+>>> instance.y
+2
+>>> instance.__dict__
+{'x': 100}
+>>> instance.__slots__
+('x', 'y', '__dict__')
+>>>
+But… what if I wanted to add the ‘__dict__’ value into __slots__ at runtime?
+
+Well…sorry dude but, no can do.
+
+>>> class myClass(object):
+...     __slots__ = ('x')
+...     def __init__(self, *args, **kwargs):
+...             self.x = 1
+...
+>>> a = myClass()
+>>> a.x
+1
+>>> a.__slots__
+'x'
+>>> a.__slots__ = ('x', 'y')
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+AttributeError: 'myClass' object attribute '__slots__' is read-only
+>>>
