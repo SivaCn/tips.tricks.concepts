@@ -1,5 +1,5 @@
 A Guide to Python's Magic Methods
-
+=================================
 
 Table of Contents
 
