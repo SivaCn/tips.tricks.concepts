@@ -1,0 +1,64 @@
+You can read more/ about the generic gotchas associated with closures here.
+The following are specific to closures as they are implemented in Python.
+
+Closure variables are read only
+
+In Python closures variables are readonly. This means the only way you can
+keep and modify state is by using an element in a mutable multi-element object
+like a dict or list. You cannot allocate a whole new list, dict, int, etc. So
+this won't work.
+
+    def mk_closure():
+       storage=0
+       def adder():
+          storage+=1
+          return storage
+       return adder
+
+     It will work if a list is used instead.
+
+    def mk_closure():
+       storage=[0]
+       def adder():
+          storage[0]+=1
+          return storage[0]
+       return adder
+
+Looping structures (for, while) do not have there own lexical environments 
+
+Closures capture values from lexical environments. These are only created by
+executing a function which means this won't work:
+
+    functions=[]
+    storage=[0] * 5
+    for i in (1, 2, 3, 4, 5):
+       def adder():
+          storage[i-1] += i
+          return storage[i-1]
+       functions.append(adder)
+
+A lexical environment is needs to be created in every iteration that can be
+closed over.
+
+    functions=[]
+    storage=[0]*5
+    for i in (1, 2, 3, 4, 5):
+       def helper(x):
+          def adder():
+             storage[x-1] += x
+             return storage[0]
+          return adder
+       functions.append(helper(i))
+
+There is a shortcut in Python that eliminates the need to define the helper
+function.  This happens to work because the default value is set at definition
+time of the function which acts similarly to the function execution of helper.
+
+    functions=[]
+    storage=[0] * 5
+    for i in (1, 2, 3, 4, 5):
+       def adder(x=i):
+          storage[x-1] += x
+          return storage[x-1]
+       functions.append(adder)
+
