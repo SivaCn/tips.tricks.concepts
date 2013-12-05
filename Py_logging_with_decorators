@@ -1,0 +1,56 @@
+Python class decorators provide powerful metaprogramming capabilities.
+Instead of a function, a class decorator takes a class and returns a class.
+The decorator can manipulate the incoming class, or simply create a new class
+and return it.
+
+The following piece of code is an example of leveraging a decorator to do
+Aspect Oriented Programming.  The classic example in AOP is the addition of
+logging to methods and functions.  Rather than writing a function decorator,
+and adding the decorator to each function, you can choose to create a class
+decorator and logging by class.
+
+
+
+import logging
+log = logging.getLogger(name)
+
+
+from functools import wraps
+from types import MethodType
+
+def class_logging(klass):
+    """
+    Class decorator that adds logging to all "public" class methods.
+    """
+    method_p = lambda m: not m.startswith('_') and \
+                         isinstance(getattr(klass, m), MethodType)
+    public_methods = filter(method_p, dir(klass))
+
+    for method_name in public_methods:
+        class_method = getattr(klass, method_name)
+
+        def helper(mname, method):
+            @wraps(method)
+            def wrapper(*a, **kw):
+                msg = '{0}({1}, {2})'.format(mname, a, kw)
+                log.debug(msg)
+                try:
+                    response = method(*a, **kw)
+                except Exception, e:
+                    error_message = 'no additional information'
+                    if hasattr(e, 'message'):
+                        error_message = e.message
+                    msg = '{0} raised {1}, {2}'.format(mname, type(e), error_message)
+                    log.debug(msg)
+                    raise
+                else:
+                    msg = '{0} returned {1}'.format(mname, response)
+                    log.debug(msg)
+
+                return response
+            return wrapper
+        
+        fn = MethodType(helper(method_name, class_method), None, klass)
+        setattr(klass, method_name, fn)
+    return klass
+ 
