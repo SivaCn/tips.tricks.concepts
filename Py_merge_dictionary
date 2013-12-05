@@ -1,0 +1,23 @@
+As anyone who comes from Perl can tell you hash slicing is useful.  Python
+dicts do not natively support slicing.  One of the issues is slicing in Python
+seems limited to defined ranges, rather than an ad-hoc collection of values. 
+
+Take heart! There is an expression that has the same effect in Python as
+Perl's hash slicing:
+
+    from operator import itemgetter
+
+    d = dict(a=1, b=2, c=3, d=4)
+    h, i, j, k = itemgetter('a', 'c', 'a', 'd')(d)
+    # h, i, j, k => 1, 3, 1, 4
+
+Alternate solutions are usually more complicated expressions. 
+    d = dict(a=1, b=2, c=3, d=4)
+
+    # conceptually more complicated expressions
+    h, i, j, k = (d[i] for i in ('a', 'c', 'a', 'd'))
+    h, i, j, k = map(d.get, ('a', 'c', 'a', 'd'))
+
+
+itemgetter provides a more simple expression for extracting multiple ad-hoc
+values from a dictionary.
