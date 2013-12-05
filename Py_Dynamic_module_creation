@@ -1,0 +1,39 @@
+Python has great metaprogramming capabilities.
+
+Python modules are implicitly created with a file.  It is one of the primary
+namespacing mechanisms in Python.  Occasionally you may wan to dynamically
+create one. 
+
+There are a few use cases for dynamic module creation.  The use case that
+comes up most frequently is modules created in the service of automated tests.
+Sometimes a module is needed as input and sometimes it's needed as a mock.
+Other use cases exist, but are more rare in my experience.  One I have done
+recently is automatic module creation to create the appropriate modules a
+framework or library expects. There have been other instances as well,
+although infrequent.  Regardless, it's a useful tool to have in your toolbox
+should the need ever arise.
+
+
+    from types import ModuleType
+    import sys
+
+    def make_module(new_module, doc="", scope=locals()):
+        """
+        make_module('a.b.c.d', doc="", scope=locals()]) -> 
+
+        * creates module (and submodules as needed)
+        * adds module (and submodules) to sys.modules
+        * correctly nests submodules as needed
+        """
+        module_name = []
+        for name in new_module.split('.'):
+            m = ModuleType(name, doc)
+            parent_module_name = '.'.join(module_name)
+            if parent_module_name:
+                setattr(sys.modules[parent_module_name], name, m)
+            else:
+                scope[name] = m
+            module_name.append(name)
+            sys.modules['.'.join(module_name)] = m
+        return sys.modules['.'.join(module_name)]
+
