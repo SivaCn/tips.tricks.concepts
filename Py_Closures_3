@@ -15,7 +15,7 @@ this won't work.
           return storage
        return adder
 
-     It will work if a list is used instead.
+It will work if a list is used instead.
 
     def mk_closure():
        storage=[0]
