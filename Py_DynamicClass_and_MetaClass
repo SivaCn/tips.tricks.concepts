@@ -1,0 +1,41 @@
+Python Metaprogramming: Dynamic Class and Metaclass Creation 
+
+Python has great metaprogramming capabilities.
+
+
+Python classes are typically created using the class definition.  Classes are
+used in much the same other classes in other OOP languages are used.  They are
+used to define an instantiable object with associated methods and attributes.
+Classes are also one of the primary namespacing mechanisms in Python. The
+terms class and type are often used interchangeably in Python. Occasionaly you
+may need to dynamically create a class.
+
+There are use cases for dynamically creating a class or type.  Often it's a
+static definition doesn't meet your needs such as a type factory that needs to
+work on incoming types.  You may need to create a type dynamically for testing
+purposes, or because it's required by a framework or library you need to use.
+
+
+    NewClass = type('NewClass', (object, ), {})
+
+
+
+Metaclasses are a another kind of class.  They are created in the same way as
+other classes except they derive from `type`.  You can programmaticlly create
+a a metaclass as follows:
+
+    def new(cls, name, bases, dct):
+        print "metaclass new", name
+        return type.__new__(cls, name, bases, dct)
+
+    def init(cls, name, bases, dct):
+        print "metclass init", name
+        super(type(cls), cls).__init__(name, bases, dct)
+
+    DynamicMetaClass = type('DynamicMetaClass',
+                            (type, ),
+                            dict(__init__=init, __new__=new))
+
+    X = DynamicMetaClass('X',(), dict(foo=lambda self:'foo'))
+    # returns metaclass new X
+    #         metclass init X
