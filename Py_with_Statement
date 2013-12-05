@@ -1,3 +1,6 @@
+Understanding Python's "with" statement
+============= ======== ====== =========
+
 The with statement is used to wrap the execution of a block with functionality
 provided by a separate guard object (see context-managers). This allows common
 try-except-finally usage patterns to be encapsulated for convenient reuse.
