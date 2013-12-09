@@ -1,0 +1,84 @@
+A Producer creates items in a series and uses send(), but not (yield)
+A Filter uses (yield) to consume items and send() to send result to a next step.
+A Consumer uses (yield) to consume items, but does not send.
+
+The function read above is an example of a producer. It does not use (yield),
+but uses send to produce data items. The function match is an example of a
+consumer. It does not send anything, but consumes data with (yield).We can
+break up match into a filter and a consumer. The filter would be a coroutine
+that only sends on strings that match its pattern.
+
+>>> def match_filter(pattern, next_coroutine):
+        print('Looking for ' + pattern)
+        try:
+            while True:
+                s = (yield)
+                if pattern in s:
+                    next_coroutine.send(s)
+        except GeneratorExit:
+            next_coroutine.close()
+
+And the consumer would be a function that printed out lines sent to it.
+
+>>> def print_consumer():
+        print('Preparing to print')
+        try:
+            while True:
+                line = (yield)
+                print(line)
+        except GeneratorExit:
+            print("=== Done ===")
+
+When a filter or consumer is constructed, its __next__ method must be invoked
+to start its execution.
+
+>>> printer = print_consumer()
+>>> printer.__next__()
+Preparing to print
+>>> matcher = match_filter('pend', printer)
+>>> matcher.__next__()
+Looking for pend
+>>> read(text, matcher)
+spending
+pending
+=== Done ===
+
+Even though the name filter implies removing items, filters can transform
+items as well. The function below is an example of a filter that transforms
+items. It consumes strings and sends along a dictionary of the number of times
+different letters occur in the string.
+
+>>> def count_letters(next_coroutine):
+        try:
+            while True:
+                s = (yield)
+                counts = {letter:s.count(letter) for letter in set(s)}
+                next_coroutine.send(counts)
+        except GeneratorExit as e:
+            next_coroutine.close()
+
+We can use it to count the most frequently-used letters in text using a
+consumer that adds up dictionaries and finds the most frequent key.
+
+>>> def sum_dictionaries():
+        total = {}
+        try:
+            while True:
+                counts = (yield)
+                for letter, count in counts.items():
+                    total[letter] = count + total.get(letter, 0)
+        except GeneratorExit:
+            max_letter = max(total.items(), key=lambda t: t[1])[0]
+            print("Most frequent letter: " + max_letter)
+
+To run this pipeline on a file, we must first read the lines of a file
+one-by-one. Then, we send the results through count_letters and finally to
+sum_dictionaries. We can re-use the read coroutine to read the lines of a
+file.
+
+>>> s = sum_dictionaries()
+>>> s.__next__()
+>>> c = count_letters(s)
+>>> c.__next__()
+>>> read(text, c)
+Most frequent letter: n
