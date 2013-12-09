@@ -1,0 +1,33 @@
+A producer or filter does not have to be restricted to just one next step. It
+can have multiple coroutines downstream of it, and send() data to all of them.
+For example, here is a version of read that sends the words in a string to
+multiple next steps.
+
+>>> def read_to_many(text, coroutines):
+        for word in text.split():
+            for coroutine in coroutines:
+                coroutine.send(word)
+        for coroutine in coroutines:
+            coroutine.close()
+
+We can use it to examine the same text for multiple words:
+
+>>> m = match("mend")
+>>> m.__next__()
+Looking for mend
+>>> p = match("pe")
+>>> p.__next__()
+Looking for pe
+>>> read_to_many(text, [m, p])
+Commending
+spending
+people
+pending
+=== Done ===
+=== Done ===
+
+First, read_to_many calls send(word) on m. The coroutine, which is waiting at
+text = (yield) runs through its loop, prints out a match if found, and resumes
+waiting for the next send. Execution then returns to read_to_many, which
+proceeds to send the same line to p. Thus, the words of text are printed in
+order.
