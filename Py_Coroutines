@@ -1,0 +1,92 @@
+Python Coroutines
+
+In the previous section, we introduced generator functions, which use yield to
+return values. Python generator functions can also consume values using a
+(yield) statement. In addition two new methods on generator objects, send()
+and close(), create a framework for objects that consume and produce values.
+Generator functions that define these objects are coroutines.
+
+Coroutines consume values using a (yield) statement as follows:
+
+    value = (yield)
+
+With this syntax, execution pauses at this statement until the object's send
+method is invoked with an argument:
+
+    coroutine.send(data)
+
+Then, execution resumes, with value being assigned to the value of data. To
+signal the end of a computation, we shut down a coroutine using the close()
+method. This raises a GeneratorExit exception inside the coroutine, which we
+can catch with a try/except clause.
+
+The example below illustrates these concepts. It is a coroutine that prints
+strings that match a provided pattern.
+
+>>> def match(pattern):
+        print('Looking for ' + pattern)
+        try:
+            while True:
+                s = (yield)
+                if pattern in s:
+                    print(s)
+        except GeneratorExit:
+            print("=== Done ===")
+
+We initialize it with a pattern, and call __next__() to start execution:
+
+>>> m = match("Jabberwock")
+>>> m.__next__()
+Looking for Jabberwock
+
+The call to __next__() causes the body of the function to be executed, so the
+line "Looking for jabberwock" gets printed out. Execution continues until the
+statement line = (yield) is encountered. Then, execution pauses, and waits for
+a value to be sent to m. We can send values to it using send.
+
+>>> m.send("the Jabberwock with eyes of flame")
+the Jabberwock with eyes of flame
+>>> m.send("came whiffling through the tulgey wood")
+>>> m.send("and burbled as it came")
+>>> m.close()
+=== Done ===
+
+When we call m.send with a value, evaluation resumes inside the coroutine m at
+the statement line = (yield), where the sent value is assigned to the variable
+line. Evaluation continues inside m, printing out the line if it matches,
+going through the loop until it encounters line = (yield) again. Then,
+evaluation pauses inside m and resumes where m.send was called.
+
+We can chain functions that send() and functions that yield together achieve
+complex behaviors. For example, the function below splits a string named text
+into words and sends each word to another coroutine.
+
+>>> def read(text, next_coroutine):
+        for line in text.split():
+            next_coroutine.send(line)
+        next_coroutine.close()
+
+Each word is sent to the coroutine bound to next_coroutine, causing
+next_coroutine to start executing, and this function to pause and wait. It
+waits until next_coroutine pauses, at which point the function resumes by
+sending the next word or completing.
+
+If we chain this function together with match defined above, we can create a
+program that prints out only the words that match a particular word.
+
+>>> text = 'Commending spending is offending to people pending lending!'
+>>> matcher = match('ending')
+>>> matcher.__next__()
+Looking for ending
+>>> read(text, matcher)
+Commending
+spending
+offending
+pending
+lending!
+=== Done ===
+
+The read function sends each word to the coroutine matcher, which prints out
+any input that matches its pattern. Within the matcher coroutine, the line s =
+(yield) waits for each sent word, and it transfers control back to read when
+it is reached.
