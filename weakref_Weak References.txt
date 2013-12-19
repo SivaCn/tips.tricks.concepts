@@ -85,7 +85,8 @@ class weakref.ref(object[, callback])
     referents (regardless of the callback). If either referent has been deleted,
     the references are equal only if the reference objects are the same object.
 
-    Changed in version 2.4: This is now a subclassable type rather than a factory function; it derives from object.
+    Changed in version 2.4: This is now a subclassable type rather than a factory
+    function; it derives from object.
 
 weakref.proxy(object[, callback])
 
