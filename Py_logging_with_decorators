@@ -1,3 +1,4 @@
+"""
 Python class decorators provide powerful metaprogramming capabilities.
 Instead of a function, a class decorator takes a class and returns a class.
 The decorator can manipulate the incoming class, or simply create a new class
@@ -8,7 +9,7 @@ Aspect Oriented Programming.  The classic example in AOP is the addition of
 logging to methods and functions.  Rather than writing a function decorator,
 and adding the decorator to each function, you can choose to create a class
 decorator and logging by class.
-
+"""
 
 
 import logging
